@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Camera + 3D Model Overlay (Duck Test)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      height: 100%;
+    }
+
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* 自撮りミラー。不要なら消してOK */
+      z-index: 1;
+    }
+
+    #three-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    #status {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #ffcc00;
+      font-size: 14px;
+      font-family: system-ui, sans-serif;
+      border-radius: 6px;
+      max-width: 90vw;
+      word-wrap: break-word;
+      z-index: 3;
+    }
+
+    #startBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 12px 24px;
+      font-size: 16px;
+      font-family: system-ui, sans-serif;
+      border-radius: 8px;
+      border: none;
+      background: #2b6cb0;
+      color: #fff;
+      z-index: 3;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="three-canvas"></canvas>
+    <div id="status">読み込み中…</div>
+    <button id="startBtn">カメラを開始</button>
+  </div>
+
+  <!-- three.js と GLTFLoader（古典的 script src） -->
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+
+  <script>
+    const video    = document.getElementById('video');
+    const canvas   = document.getElementById('three-canvas');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+
+    let scene, camera, renderer;
+    let model = null;
+    let cube  = null;
+
+    function logStatus(msg) {
+      statusEl.textContent = msg;
+    }
+
+    // ① three.js はページ読み込み直後に必ず初期化
+    initThree();
+    animate();  // カメラ関係なく立方体だけは回し始める
+
+    function initThree() {
+      const container = document.getElementById('container');
+
+      scene = new THREE.Scene();
+
+      const fov = 45;
+      const aspect = container.clientWidth / container.clientHeight;
+      const near = 0.1;
+      const far = 100;
+      camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+      camera.position.set(0, 0, 3);
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        alpha: true,
+        antialias: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setSize(container.clientWidth, container.clientHeight, false);
+
+      // ライト
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(1, 1, 1);
+      scene.add(dirLight);
+
+      // デバッグ用の緑ワイヤーフレーム立方体
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const boxMat = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        wireframe: true
+      });
+      cube = new THREE.Mesh(boxGeo, boxMat);
+      scene.add(cube);
+
+      logStatus('Three.js 初期化完了（立方体だけ先に回します）');
+    }
+
+    function onResize() {
+      if (!renderer || !camera) return;
+      const container = document.getElementById('container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    // ② GLB 読み込み：絶対URLでパス問題を完全に潰す
+    function loadModel() {
+      logStatus('3Dモデル読み込み中 (Duck.glb)...');
+
+      const loader = new THREE.GLTFLoader();
+
+      // ★ ここを書き換えてください：
+      // YOUR_USERNAME を先生の GitHub ユーザー名に。
+      const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
+
+      loader.load(
+        duckUrl,
+        function (gltf) {
+          model = gltf.scene;
+          model.scale.set(1.0, 1.0, 1.0);
+          model.position.set(0, -0.5, 0);
+          model.rotation.set(0, Math.PI, 0);
+          scene.add(model);
+          logStatus('表示中: Duck.glb');
+        },
+        function (xhr) {
+          if (xhr.total) {
+            const ratio = (xhr.loaded / xhr.total) * 100;
+            logStatus('3Dモデル読み込み中... ' + ratio.toFixed(0) + '%');
+          } else {
+            logStatus('3Dモデル読み込み中...');
+          }
+        },
+        function (error) {
+          console.error('GLB load error', error);
+          logStatus('Duck.glb の読み込みに失敗しました（立方体のみ表示）');
+        }
+      );
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (cube) {
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.02;
+      }
+      if (model) {
+        model.rotation.y += 0.01;
+      }
+
+      if (renderer && camera && scene) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    // ③ カメラはボタンを押したときだけ起動
+    function startApp() {
+      startBtn.disabled = true;
+      startBtn.textContent = '起動中...';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        logStatus('このブラウザはカメラに対応していません');
+        startBtn.disabled = false;
+        startBtn.textContent = '再試行';
+        return;
+      }
+
+      logStatus('カメラ起動中...');
+
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(function (stream) {
+          video.srcObject = stream;
+          video.onloadedmetadata = function () {
+            video.play();
+            logStatus('カメラ起動成功（Duck.glb 読み込み開始）');
+            onResize();
+            loadModel();      // カメラが動いたら GLB を読み込み
+            startBtn.style.display = 'none';
+          };
+        })
+        .catch(function (e) {
+          console.error(e);
+          logStatus('カメラ起動に失敗しました: ' + e.name + ' / ' + e.message);
+          startBtn.disabled = false;
+          startBtn.textContent = '再試行';
+        });
+    }
+
+    startBtn.addEventListener('click', startApp);
+    window.addEventListener('resize', onResize);
+  </script>
+</body>
+</html>
