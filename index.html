@@ -119,4 +119,104 @@
     }
 
     function initThree() {
-      scene =
+      scene = new THREE.Scene();
+
+      const fov = 45;
+      const aspect = canvas.clientWidth / canvas.clientHeight;
+      const near = 0.1;
+      const far = 100;
+      camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+      camera.position.set(0, 0, 3);
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        alpha: true,
+        antialias: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(1, 1, 1);
+      scene.add(dirLight);
+    }
+
+    function onResize() {
+      const container = document.getElementById('container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      if (!renderer || !camera) return;
+
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    function loadModel() {
+      statusEl.textContent = '3Dモデル読み込み中 (DuckD.glb)...';
+
+      const loader = new GLTFLoader();
+      loader.load(
+        'DuckD.glb',
+        (gltf) => {
+          model = gltf.scene;
+          model.scale.set(1.0, 1.0, 1.0);
+          model.position.set(0, -0.5, 0);
+          model.rotation.set(0, Math.PI, 0);
+          scene.add(model);
+          statusEl.textContent = '表示中: DuckD.glb';
+        },
+        (xhr) => {
+          if (xhr.total) {
+            const ratio = (xhr.loaded / xhr.total) * 100;
+            statusEl.textContent = '3Dモデル読み込み中... ' + ratio.toFixed(0) + '%';
+          } else {
+            statusEl.textContent = '3Dモデル読み込み中...';
+          }
+        },
+        (error) => {
+          console.error('GLB load error', error);
+          statusEl.textContent = 'DuckD.glb の読み込みに失敗しました';
+        }
+      );
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (model) {
+        model.rotation.y += 0.01;
+      }
+      renderer.render(scene, camera);
+    }
+
+    async function startApp() {
+      startBtn.disabled = true;
+      startBtn.textContent = '起動中...';
+      try {
+        await initCamera();
+        statusEl.textContent = 'カメラ起動成功';
+        initThree();
+        onResize();
+        loadModel();
+        animate();
+        startBtn.style.display = 'none';
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = 'カメラ起動に失敗しました: ' + e.name + ' / ' + e.message;
+        startBtn.disabled = false;
+        startBtn.textContent = '再試行';
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      startApp();
+    });
+
+    window.addEventListener('resize', onResize);
+  </script>
+</body>
+</html>
