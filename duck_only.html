@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Duck Only Test</title>
+  <title>Duck Only Test (xx2323kanaa-code)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <style>
     html, body {
@@ -22,13 +22,13 @@
 <body>
   <canvas id="three-canvas"></canvas>
 
-  <!-- ES Modules 版 three.js & GLTFLoader -->
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+  <!-- simple_cube と同じスタイル：古典的 three.min.js + GLTFLoader -->
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
+  <script>
     const canvas   = document.getElementById('three-canvas');
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio || 1);
     renderer.setSize(window.innerWidth, window.innerHeight, false);
 
@@ -50,13 +50,34 @@
     dir.position.set(1, 1, 1);
     scene.add(dir);
 
-    // まずデバッグ用キューブ
+    // 読み込み中に回しておくキューブ
     const boxGeo = new THREE.BoxGeometry(1, 1, 1);
     const boxMat = new THREE.MeshNormalMaterial();
-    const cube = new THREE.Mesh(boxGeo, boxMat);
+    const cube   = new THREE.Mesh(boxGeo, boxMat);
     scene.add(cube);
 
-    // 画面サイズに追従
+    // ★ ここで Duck.glb を読む（D が大文字）
+    const loader = new THREE.GLTFLoader();
+
+    const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
+    // ↑ ユーザー名：xx2323kanaa-code、リポジトリ名：DuckD、ファイル名：Duck.glb
+
+    loader.load(
+      duckUrl,
+      function (gltf) {
+        // 読み込めたらキューブを消してアヒルだけ出す
+        scene.remove(cube);
+        const duck = gltf.scene;
+        duck.scale.set(1.0, 1.0, 1.0);
+        duck.position.set(0, -0.5, 0);
+        scene.add(duck);
+      },
+      undefined,
+      function (error) {
+        console.error('Duck.glb load error:', error);
+      }
+    );
+
     function onResize() {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -66,25 +87,6 @@
     }
     window.addEventListener('resize', onResize);
     onResize();
-
-    // Duck.glb を読み込む（index.html と同じ階層にある前提）
-    const loader = new GLTFLoader();
-    loader.load(
-      'Duck.glb',  // 相対パス
-      (gltf) => {
-        // 読み込めたらキューブは消して、Duck だけ残す
-        scene.remove(cube);
-
-        const duck = gltf.scene;
-        duck.scale.set(1.0, 1.0, 1.0);
-        duck.position.set(0, -0.5, 0);
-        scene.add(duck);
-      },
-      undefined,
-      (err) => {
-        console.error('Duck.glb load error:', err);
-      }
-    );
 
     function animate() {
       requestAnimationFrame(animate);
