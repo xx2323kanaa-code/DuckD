@@ -78,15 +78,15 @@
   <div id="container">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="three-canvas"></canvas>
-    <div id="status">読み込み中…</div>
+    <div id="status">カメラはまだ開始していません</div>
     <button id="startBtn">カメラを開始</button>
   </div>
 
-   <!-- three.js を ES Modules で読み込む版（公式推奨スタイル） -->
-  <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
-    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
+  <!-- ★ 非モジュール版 three.js ＋ GLTFLoader（グローバル THREE を使う） -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
+  <script>
     const video     = document.getElementById('video');
     const canvas    = document.getElementById('three-canvas');
     const statusEl  = document.getElementById('status');
@@ -122,7 +122,7 @@
       });
       renderer.setPixelRatio(window.devicePixelRatio || 1);
       renderer.setSize(width, height, false);
-      renderer.setClearColor(0x000000, 0); // 背景は透明（下にカメラ映像）
+      renderer.setClearColor(0x000000, 0); // 背景は透明（カメラ映像が下に見える）
 
       // ライト
       const ambient = new THREE.AmbientLight(0xffffff, 0.8);
@@ -132,7 +132,7 @@
       dirLight.position.set(1, 1, 1);
       scene.add(dirLight);
 
-      // 必ず表示されるキューブ
+      // ★ 必ず見えるカラフルなキューブ（デバッグ用）
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const boxMat = new THREE.MeshNormalMaterial();
       cube = new THREE.Mesh(boxGeo, boxMat);
@@ -150,32 +150,38 @@
       camera.updateProjectionMatrix();
     }
 
-    // ★ まずは three.js 公式の Duck を読み込んで、コード側が正常かチェック
+    // three.js 公式 Duck を読み込んで、コード側の正常性を確認
     function loadModel() {
-      const loader = new GLTFLoader();
+      console.log('typeof THREE.GLTFLoader:', typeof THREE.GLTFLoader);
 
+      if (typeof THREE.GLTFLoader === 'undefined') {
+        logStatus('GLTFLoader が読み込めません（キューブのみ表示）');
+        return;
+      }
+
+      const loader = new THREE.GLTFLoader();
       const duckUrl = 'https://threejs.org/examples/models/gltf/Duck/glTF-Binary/Duck.glb';
+
       logStatus('3Dモデル読み込み中（three.js 公式 Duck）...');
 
       loader.load(
         duckUrl,
-        (gltf) => {
+        function (gltf) {
           console.log('three.js Duck loaded', gltf);
 
-          // 読めたらキューブを消して Duck を表示
           if (cube) {
             scene.remove(cube);
             cube = null;
           }
           model = gltf.scene;
-          model.scale.set(0.01, 0.01, 0.01);  // 公式 Duck は大きいので縮小
+          model.scale.set(0.01, 0.01, 0.01); // 大きいので縮小
           model.position.set(0, -0.5, 0);
           model.rotation.set(0, Math.PI, 0);
           scene.add(model);
 
           logStatus('表示中：three.js サンプル Duck');
         },
-        (xhr) => {
+        function (xhr) {
           if (xhr && xhr.total) {
             const ratio = (xhr.loaded / xhr.total) * 100;
             logStatus('3Dモデル読み込み中... ' + ratio.toFixed(0) + '%');
@@ -183,7 +189,7 @@
             logStatus('3Dモデル読み込み中...');
           }
         },
-        (error) => {
+        function (error) {
           console.error('GLB 読み込みエラー', error);
           logStatus('Duck の読み込みに失敗しました（キューブのみ表示）');
         }
@@ -220,21 +226,21 @@
       logStatus('カメラ起動中...');
 
       navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        .then((stream) => {
+        .then(function (stream) {
           video.srcObject = stream;
-          video.onloadedmetadata = () => {
+          video.onloadedmetadata = function () {
             video.play();
             logStatus('カメラ起動成功（キューブ表示 → Duck 読み込み開始）');
 
             initThree();
             onResize();
             animate();
-            loadModel();
+            loadModel();   // ← ここで Duck 読み込み
 
             startBtn.style.display = 'none';
           };
         })
-        .catch((e) => {
+        .catch(function (e) {
           console.error(e);
           logStatus('カメラ起動に失敗しました: ' + e.name + ' / ' + e.message);
           startBtn.disabled = false;
@@ -245,6 +251,5 @@
     startBtn.addEventListener('click', startApp);
     window.addEventListener('resize', onResize);
   </script>
-
 </body>
 </html>
