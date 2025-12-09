@@ -2,254 +2,87 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Camera + 3D Model Overlay (Duck Test)</title>
+  <title>Camera Test</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #000;
       height: 100%;
+      background: #000;
     }
-
-    #container {
-      position: relative;
+    #video {
       width: 100vw;
       height: 100vh;
-      overflow: hidden;
-      background: #000;
-    }
-
-    #video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* 自撮りミラー。不要なら消してOK */
-      z-index: 1;
     }
-
-    #three-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
-    }
-
     #status {
       position: absolute;
-      top: 8px;
+      top: 10px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 6px 10px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #ffcc00;
+      padding: 6px 12px;
       font-size: 14px;
-      font-family: system-ui, sans-serif;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
       border-radius: 6px;
-      max-width: 90vw;
-      word-wrap: break-word;
-      z-index: 3;
     }
-
     #startBtn {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      padding: 12px 24px;
-      font-size: 16px;
-      font-family: system-ui, sans-serif;
-      border-radius: 8px;
-      border: none;
+      padding: 12px 20px;
       background: #2b6cb0;
       color: #fff;
-      z-index: 3;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="three-canvas"></canvas>
-    <div id="status">カメラはまだ開始していません</div>
-    <button id="startBtn">カメラを開始</button>
-  </div>
 
-  <!-- ★ 非モジュール版 three.js ＋ GLTFLoader（グローバル THREE を使う） -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="status">カメラはまだ開始していません</div>
+  <button id="startBtn">カメラを開始</button>
 
   <script>
-    const video     = document.getElementById('video');
-    const canvas    = document.getElementById('three-canvas');
-    const statusEl  = document.getElementById('status');
-    const startBtn  = document.getElementById('startBtn');
-    const container = document.getElementById('container');
+    const video = document.getElementById("video");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
 
-    let scene, camera, renderer;
-    let model = null;
-    let cube  = null;
-
-    function logStatus(msg) {
-      console.log('[STATUS]', msg);
+    function log(msg) {
+      console.log(msg);
       statusEl.textContent = msg;
     }
 
-    function initThree() {
-      scene = new THREE.Scene();
-
-      const width  = container.clientWidth || window.innerWidth;
-      const height = container.clientHeight || window.innerHeight;
-
-      const fov = 45;
-      const aspect = width / height;
-      const near = 0.1;
-      const far  = 100;
-      camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-      camera.position.set(0, 0, 3);
-
-      renderer = new THREE.WebGLRenderer({
-        canvas: canvas,
-        alpha: true,
-        antialias: true
-      });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(width, height, false);
-      renderer.setClearColor(0x000000, 0); // 背景は透明（カメラ映像が下に見える）
-
-      // ライト
-      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-      scene.add(ambient);
-
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      dirLight.position.set(1, 1, 1);
-      scene.add(dirLight);
-
-      // ★ 必ず見えるカラフルなキューブ（デバッグ用）
-      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-      const boxMat = new THREE.MeshNormalMaterial();
-      cube = new THREE.Mesh(boxGeo, boxMat);
-      scene.add(cube);
-
-      logStatus('Three.js 初期化完了（キューブ表示中／Duck読み込み待機）');
-    }
-
-    function onResize() {
-      if (!renderer || !camera) return;
-      const width  = container.clientWidth || window.innerWidth;
-      const height = container.clientHeight || window.innerHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    }
-
-    // three.js 公式 Duck を読み込んで、コード側の正常性を確認
-    function loadModel() {
-      console.log('typeof THREE.GLTFLoader:', typeof THREE.GLTFLoader);
-
-      if (typeof THREE.GLTFLoader === 'undefined') {
-        logStatus('GLTFLoader が読み込めません（キューブのみ表示）');
-        return;
-      }
-
-      const loader = new THREE.GLTFLoader();
-      const duckUrl = 'https://threejs.org/examples/models/gltf/Duck/glTF-Binary/Duck.glb';
-
-      logStatus('3Dモデル読み込み中（three.js 公式 Duck）...');
-
-      loader.load(
-        duckUrl,
-        function (gltf) {
-          console.log('three.js Duck loaded', gltf);
-
-          if (cube) {
-            scene.remove(cube);
-            cube = null;
-          }
-          model = gltf.scene;
-          model.scale.set(0.01, 0.01, 0.01); // 大きいので縮小
-          model.position.set(0, -0.5, 0);
-          model.rotation.set(0, Math.PI, 0);
-          scene.add(model);
-
-          logStatus('表示中：three.js サンプル Duck');
-        },
-        function (xhr) {
-          if (xhr && xhr.total) {
-            const ratio = (xhr.loaded / xhr.total) * 100;
-            logStatus('3Dモデル読み込み中... ' + ratio.toFixed(0) + '%');
-          } else {
-            logStatus('3Dモデル読み込み中...');
-          }
-        },
-        function (error) {
-          console.error('GLB 読み込みエラー', error);
-          logStatus('Duck の読み込みに失敗しました（キューブのみ表示）');
-        }
-      );
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (cube) {
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.02;
-      }
-      if (model) {
-        model.rotation.y += 0.01;
-      }
-
-      if (renderer && camera && scene) {
-        renderer.render(scene, camera);
-      }
-    }
-
-    function startApp() {
+    startBtn.addEventListener("click", () => {
       startBtn.disabled = true;
-      startBtn.textContent = '起動中...';
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        logStatus('このブラウザはカメラに対応していません');
-        startBtn.disabled = false;
-        startBtn.textContent = '再試行';
+        log("このブラウザはカメラに対応していません");
         return;
       }
 
-      logStatus('カメラ起動中...');
+      log("カメラ起動中...");
 
-      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        .then(function (stream) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
           video.srcObject = stream;
-          video.onloadedmetadata = function () {
+          video.onloadedmetadata = () => {
             video.play();
-            logStatus('カメラ起動成功（キューブ表示 → Duck 読み込み開始）');
-
-            initThree();
-            onResize();
-            animate();
-            loadModel();   // ← ここで Duck 読み込み
-
-            startBtn.style.display = 'none';
+            log("カメラ起動成功");
+            startBtn.style.display = "none";
           };
         })
-        .catch(function (e) {
-          console.error(e);
-          logStatus('カメラ起動に失敗しました: ' + e.name + ' / ' + e.message);
+        .catch(err => {
+          log("カメラ起動に失敗: " + err.message);
           startBtn.disabled = false;
-          startBtn.textContent = '再試行';
         });
-    }
-
-    startBtn.addEventListener('click', startApp);
-    window.addEventListener('resize', onResize);
+    });
   </script>
+
 </body>
 </html>
