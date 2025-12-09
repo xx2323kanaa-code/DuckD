@@ -150,8 +150,7 @@
       logStatus('3Dモデル読み込み中 (DuckD.glb)...');
 
       const loader = new THREE.GLTFLoader();
-      loader.load(
-        'DuckD.glb',  // index.html と同じフォルダに DuckD.glb を置く
+      loader.load('./DuckD.glb',  // index.html と同じフォルダに DuckD.glb を置く
         function (gltf) {
           model = gltf.scene;
           model.scale.set(1.0, 1.0, 1.0);
