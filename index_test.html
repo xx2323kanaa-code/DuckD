@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D Test</title>
+    <style>body { margin: 0; }</style>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
+      import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(1, 1, 1);
+      scene.add(light);
+
+      // ← ここでDuck.glbを読み込み
+      const loader = new GLTFLoader();
+      loader.load('Duck.glb', (gltf) => {
+        scene.add(gltf.scene);
+        camera.position.z = 5;
+        renderer.render(scene, camera);
+      }, undefined, (err) => {
+        console.error('GLB load error', err);
+      });
+    </script>
+  </body>
+</html>
