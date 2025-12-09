@@ -78,11 +78,11 @@
   <div id="container">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="three-canvas"></canvas>
-    <div id="status">カメラはまだ開始していません</div>
+    <div id="status">読み込み中…</div>
     <button id="startBtn">カメラを開始</button>
   </div>
 
-  <!-- モジュールではなく古典的 <script src> で読み込む -->
+  <!-- three.js と GLTFLoader（古典的 script src） -->
   <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
   <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
@@ -100,11 +100,17 @@
       statusEl.textContent = msg;
     }
 
+    // ① three.js はページ読み込み直後に必ず初期化
+    initThree();
+    animate();  // カメラ関係なく立方体だけは回し始める
+
     function initThree() {
+      const container = document.getElementById('container');
+
       scene = new THREE.Scene();
 
       const fov = 45;
-      const aspect = canvas.clientWidth / canvas.clientHeight;
+      const aspect = container.clientWidth / container.clientHeight;
       const near = 0.1;
       const far = 100;
       camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
@@ -116,7 +122,7 @@
         antialias: true
       });
       renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+      renderer.setSize(container.clientWidth, container.clientHeight, false);
 
       // ライト
       const ambient = new THREE.AmbientLight(0xffffff, 0.8);
@@ -126,7 +132,7 @@
       dirLight.position.set(1, 1, 1);
       scene.add(dirLight);
 
-      // ★ デバッグ用の緑ワイヤーフレーム立方体（GLB がダメでも必ず出る）
+      // デバッグ用の緑ワイヤーフレーム立方体
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const boxMat = new THREE.MeshBasicMaterial({
         color: 0x00ff00,
@@ -134,6 +140,8 @@
       });
       cube = new THREE.Mesh(boxGeo, boxMat);
       scene.add(cube);
+
+      logStatus('Three.js 初期化完了（立方体だけ先に回します）');
     }
 
     function onResize() {
@@ -146,11 +154,18 @@
       camera.updateProjectionMatrix();
     }
 
+    // ② GLB 読み込み：絶対URLでパス問題を完全に潰す
     function loadModel() {
       logStatus('3Dモデル読み込み中 (Duck.glb)...');
 
       const loader = new THREE.GLTFLoader();
-      loader.load('./Duck.glb',  // index.html と同じフォルダに Duck.glb を置く
+
+      // ★ ここを書き換えてください：
+      // YOUR_USERNAME を先生の GitHub ユーザー名に。
+      const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
+
+      loader.load(
+        duckUrl,
         function (gltf) {
           model = gltf.scene;
           model.scale.set(1.0, 1.0, 1.0);
@@ -185,9 +200,12 @@
         model.rotation.y += 0.01;
       }
 
-      renderer.render(scene, camera);
+      if (renderer && camera && scene) {
+        renderer.render(scene, camera);
+      }
     }
 
+    // ③ カメラはボタンを押したときだけ起動
     function startApp() {
       startBtn.disabled = true;
       startBtn.textContent = '起動中...';
@@ -201,17 +219,14 @@
 
       logStatus('カメラ起動中...');
 
-      // まずごくシンプルな指定でカメラを要求
       navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         .then(function (stream) {
           video.srcObject = stream;
           video.onloadedmetadata = function () {
             video.play();
-            logStatus('カメラ起動成功');
-            initThree();
+            logStatus('カメラ起動成功（Duck.glb 読み込み開始）');
             onResize();
-            loadModel();
-            animate();
+            loadModel();      // カメラが動いたら GLB を読み込み
             startBtn.style.display = 'none';
           };
         })
