@@ -28,7 +28,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* ミラー不要なら消してOK */
+      transform: scaleX(-1); /* ミラーが嫌ならこの行を消す */
     }
 
     #three-canvas {
@@ -77,46 +77,18 @@
     <button id="startBtn">カメラを開始</button>
   </div>
 
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.162.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.162.0/examples/jsm/loaders/GLTFLoader.js';
+  <!-- モジュール import はやめて、古典的な読み込みに切り替える -->
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('three-canvas');
+  <script>
+    const video   = document.getElementById('video');
+    const canvas  = document.getElementById('three-canvas');
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
 
     let scene, camera, renderer;
     let model = null;
-
-    async function initCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('このブラウザはカメラに対応していません');
-      }
-
-      statusEl.textContent = 'カメラ起動中...';
-
-      // まずは一番ゆるい指定で試す
-      const constraints = {
-        audio: false,
-        video: true
-      };
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-
-        return new Promise((resolve) => {
-          video.onloadedmetadata = () => {
-            video.play();
-            resolve();
-          };
-        });
-      } catch (e) {
-        // ここに来たら、権限拒否か、何らかの理由で失敗
-        throw e;
-      }
-    }
 
     function initThree() {
       scene = new THREE.Scene();
@@ -145,12 +117,10 @@
     }
 
     function onResize() {
+      if (!renderer || !camera) return;
       const container = document.getElementById('container');
       const width = container.clientWidth;
       const height = container.clientHeight;
-
-      if (!renderer || !camera) return;
-
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -159,10 +129,10 @@
     function loadModel() {
       statusEl.textContent = '3Dモデル読み込み中 (DuckD.glb)...';
 
-      const loader = new GLTFLoader();
+      const loader = new THREE.GLTFLoader(); // モジュール版ではなくグローバル版
       loader.load(
-        'DuckD.glb',
-        (gltf) => {
+        'DuckD.glb', // index.html と同じフォルダに DuckD.glb を置く
+        function (gltf) {
           model = gltf.scene;
           model.scale.set(1.0, 1.0, 1.0);
           model.position.set(0, -0.5, 0);
@@ -170,7 +140,7 @@
           scene.add(model);
           statusEl.textContent = '表示中: DuckD.glb';
         },
-        (xhr) => {
+        function (xhr) {
           if (xhr.total) {
             const ratio = (xhr.loaded / xhr.total) * 100;
             statusEl.textContent = '3Dモデル読み込み中... ' + ratio.toFixed(0) + '%';
@@ -178,7 +148,7 @@
             statusEl.textContent = '3Dモデル読み込み中...';
           }
         },
-        (error) => {
+        function (error) {
           console.error('GLB load error', error);
           statusEl.textContent = 'DuckD.glb の読み込みに失敗しました';
         }
@@ -193,29 +163,42 @@
       renderer.render(scene, camera);
     }
 
-    async function startApp() {
+    function startApp() {
       startBtn.disabled = true;
       startBtn.textContent = '起動中...';
-      try {
-        await initCamera();
-        statusEl.textContent = 'カメラ起動成功';
-        initThree();
-        onResize();
-        loadModel();
-        animate();
-        startBtn.style.display = 'none';
-      } catch (e) {
-        console.error(e);
-        statusEl.textContent = 'カメラ起動に失敗しました: ' + e.name + ' / ' + e.message;
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        statusEl.textContent = 'このブラウザはカメラに対応していません';
         startBtn.disabled = false;
         startBtn.textContent = '再試行';
+        return;
       }
+
+      statusEl.textContent = 'カメラ起動中...';
+
+      // いちばんゆるい指定でまず試す
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(function (stream) {
+          video.srcObject = stream;
+          video.onloadedmetadata = function () {
+            video.play();
+            statusEl.textContent = 'カメラ起動成功';
+            initThree();
+            onResize();
+            loadModel();
+            animate();
+            startBtn.style.display = 'none';
+          };
+        })
+        .catch(function (e) {
+          console.error(e);
+          statusEl.textContent = 'カメラ起動に失敗しました: ' + e.name + ' / ' + e.message;
+          startBtn.disabled = false;
+          startBtn.textContent = '再試行';
+        });
     }
 
-    startBtn.addEventListener('click', () => {
-      startApp();
-    });
-
+    startBtn.addEventListener('click', startApp);
     window.addEventListener('resize', onResize);
   </script>
 </body>
