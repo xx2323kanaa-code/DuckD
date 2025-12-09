@@ -82,7 +82,7 @@
     <button id="startBtn">カメラを開始</button>
   </div>
 
-  <!-- three.js と GLTFLoader（古典的 script src） -->
+   <!-- three.js 本体と GLTFLoader を読み込み（グローバル THREE を使う） -->
   <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
   <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
@@ -91,28 +91,27 @@
     const canvas   = document.getElementById('three-canvas');
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
+    const container = document.getElementById('container');
 
     let scene, camera, renderer;
     let model = null;
     let cube  = null;
 
     function logStatus(msg) {
+      console.log('[STATUS]', msg);
       statusEl.textContent = msg;
     }
 
-    // ① three.js はページ読み込み直後に必ず初期化
-    initThree();
-    animate();  // カメラ関係なく立方体だけは回し始める
-
     function initThree() {
-      const container = document.getElementById('container');
-
       scene = new THREE.Scene();
 
+      const width  = container.clientWidth;
+      const height = container.clientHeight;
+
       const fov = 45;
-      const aspect = container.clientWidth / container.clientHeight;
+      const aspect = width / height;
       const near = 0.1;
-      const far = 100;
+      const far  = 100;
       camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
       camera.position.set(0, 0, 3);
 
@@ -122,7 +121,8 @@
         antialias: true
       });
       renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(container.clientWidth, container.clientHeight, false);
+      renderer.setSize(width, height, false);
+      renderer.setClearColor(0x000000, 0); // 背景は透明（カメラ映像が下に見える）
 
       // ライト
       const ambient = new THREE.AmbientLight(0xffffff, 0.8);
@@ -132,50 +132,51 @@
       dirLight.position.set(1, 1, 1);
       scene.add(dirLight);
 
-      // デバッグ用の緑ワイヤーフレーム立方体
+      // デバッグ用キューブ（必ず表示されるはず）
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-      const boxMat = new THREE.MeshBasicMaterial({
-        color: 0x00ff00,
-        wireframe: true
-      });
+      const boxMat = new THREE.MeshNormalMaterial();
       cube = new THREE.Mesh(boxGeo, boxMat);
       scene.add(cube);
 
-      logStatus('Three.js 初期化完了（立方体だけ先に回します）');
+      logStatus('Three.js 初期化完了（キューブ表示中）');
     }
 
     function onResize() {
       if (!renderer || !camera) return;
-      const container = document.getElementById('container');
-      const width = container.clientWidth;
+      const width  = container.clientWidth;
       const height = container.clientHeight;
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
 
-    // ② GLB 読み込み：絶対URLでパス問題を完全に潰す
     function loadModel() {
-      logStatus('3Dモデル読み込み中 (Duck.glb)...');
-
+      // ★ まずは three.js 公式の Duck を読んでみて、「コード側が本当に正常か」を確認する
+      //    ここでアヒルが出れば、先生の Duck.glb ではなくファイル自体の問題、と切り分けできる
       const loader = new THREE.GLTFLoader();
 
-      // ★ ここを書き換えてください：
-      // YOUR_USERNAME を先生の GitHub ユーザー名に。
-      const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
+      // three.js のサンプル Duck（既知の正常ファイル）
+      const duckUrl = 'https://threejs.org/examples/models/gltf/Duck/glTF-Binary/Duck.glb';
+
+      logStatus('3Dモデル読み込み中 (テスト用 Duck)...');
 
       loader.load(
         duckUrl,
         function (gltf) {
+          console.log('Duck sample loaded', gltf);
+          if (cube) {
+            scene.remove(cube);
+            cube = null;
+          }
           model = gltf.scene;
-          model.scale.set(1.0, 1.0, 1.0);
+          model.scale.set(0.01, 0.01, 0.01); // このサンプルは大きいので少し小さく
           model.position.set(0, -0.5, 0);
           model.rotation.set(0, Math.PI, 0);
           scene.add(model);
-          logStatus('表示中: Duck.glb');
+          logStatus('表示中: three.js サンプル Duck');
         },
         function (xhr) {
-          if (xhr.total) {
+          if (xhr && xhr.total) {
             const ratio = (xhr.loaded / xhr.total) * 100;
             logStatus('3Dモデル読み込み中... ' + ratio.toFixed(0) + '%');
           } else {
@@ -184,7 +185,7 @@
         },
         function (error) {
           console.error('GLB load error', error);
-          logStatus('Duck.glb の読み込みに失敗しました（立方体のみ表示）');
+          logStatus('Duck の読み込みに失敗しました（キューブのみ表示）');
         }
       );
     }
@@ -205,7 +206,6 @@
       }
     }
 
-    // ③ カメラはボタンを押したときだけ起動
     function startApp() {
       startBtn.disabled = true;
       startBtn.textContent = '起動中...';
@@ -224,9 +224,11 @@
           video.srcObject = stream;
           video.onloadedmetadata = function () {
             video.play();
-            logStatus('カメラ起動成功（Duck.glb 読み込み開始）');
+            logStatus('カメラ起動成功（Duck 読み込み開始）');
+            initThree();
             onResize();
-            loadModel();      // カメラが動いたら GLB を読み込み
+            loadModel();
+            animate();
             startBtn.style.display = 'none';
           };
         })
@@ -241,5 +243,6 @@
     startBtn.addEventListener('click', startApp);
     window.addEventListener('resize', onResize);
   </script>
+
 </body>
 </html>
