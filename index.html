@@ -1,256 +1,446 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Camera + 3D Model Overlay (Duck Test)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+  <title>EGG – Camera + COCO + Menu + Debug HUD (Minimal Cut)</title>
+
+  <!-- ===== TensorFlow.js + COCO-SSD (same family as your full build) ===== -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-      height: 100%;
+    html,body{
+      margin:0;padding:0;width:100%;height:100%;
+      background:#000;overflow:hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
 
-    #container {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background: #000;
+    /* ---- container/video ---- */
+    #container{ position:relative; width:100vw; height:100vh; background:#000; overflow:hidden; }
+    #video{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit:cover;
+      background:#000;
     }
 
-    #video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transform: scaleX(-1); /* 自撮りミラー。不要なら消してOK */
-      z-index: 1;
+    /* ---- title bar (simple but keeps the "pill + menu" idea) ---- */
+    #titleBar{
+      position:fixed; left:0; right:0; top:0;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 10px;
+      z-index:5000;
+      pointer-events:none; /* only children buttons enable */
+    }
+    #titleStack{ display:flex; flex-direction:column; gap:2px; pointer-events:none; }
+    .t1{ color:#fff; font-weight:700; font-size:16px; letter-spacing:0.4px; }
+    .t2{ color:rgba(255,255,255,0.75); font-size:12px; line-height:1.2; }
+    #pill{
+      margin-left:auto;
+      background:rgba(0,0,0,0.55);
+      border:1px solid rgba(255,255,255,0.18);
+      color:#fff;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      pointer-events:none;
+      white-space:nowrap;
     }
 
-    #three-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 2;
+    /* ---- MENU (keeps ≡ button + panel + Debug HUD selector) ---- */
+    #menuWrapper{
+      position:fixed; top:10px; right:10px;
+      z-index:6000;
+      pointer-events:auto;
+    }
+    #menuToggle{
+      width:44px; height:36px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.22);
+      background:rgba(0,0,0,0.55);
+      color:#fff;
+      font-size:18px;
+    }
+    #menuPanel{
+      position:absolute; top:44px; right:0;
+      width:280px;
+      max-height:70vh;
+      overflow:auto;
+      background:rgba(0,0,0,0.78);
+      border:1px solid rgba(255,255,255,0.18);
+      border-radius:12px;
+      padding:12px;
+      display:block;
+    }
+    #menuPanel.hidden{ display:none; }
+    .menu-section{ margin-bottom:12px; }
+    .menu-section h3{
+      margin:0 0 6px 0;
+      font-size:13px;
+      color:#fff;
+      letter-spacing:0.3px;
+    }
+    .menu-section select, .menu-section button{
+      width:100%;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.20);
+      background:rgba(255,255,255,0.08);
+      color:#fff;
+      font-size:14px;
+      outline:none;
+    }
+    .menu-section span{
+      display:block;
+      margin-top:6px;
+      font-size:11px;
+      color:rgba(255,255,255,0.70);
+      line-height:1.2;
     }
 
-    #status {
-      position: absolute;
+    /* =========================================
+       DEBUG HUD (kept concept: menu ≡ → Debug HUD ON/OFF)
+    ========================================= */
+    #debugHud {
+      position: fixed;
       top: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 6px 10px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #ffcc00;
-      font-size: 14px;
-      font-family: system-ui, sans-serif;
-      border-radius: 6px;
-      max-width: 90vw;
-      word-wrap: break-word;
-      z-index: 3;
+      left: 8px;
+      width: min(520px, calc(100vw - 16px));
+      max-height: min(46vh, calc(100vh - 16px));
+      z-index: 9999;
+      background: rgba(0,0,0,0.62);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      overflow: hidden;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: none; /* default OFF */
     }
-
-    #startBtn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      padding: 12px 24px;
-      font-size: 16px;
-      font-family: system-ui, sans-serif;
-      border-radius: 8px;
-      border: none;
-      background: #2b6cb0;
-      color: #fff;
-      z-index: 3;
+    #debugHudHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.25);
+    }
+    #debugHudTitle{
+      color:#fff;
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:0.2px;
+      opacity:0.95;
+    }
+    #debugHudBtns{ display:flex; gap:6px; }
+    .hudBtn{
+      padding:6px 10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.22);
+      background:rgba(255,255,255,0.08);
+      color:#fff;
+      font-size:12px;
+      cursor:pointer;
+    }
+    #debugHudBody{
+      padding: 8px 10px 10px;
+    }
+    #debugText{
+      margin:0;
+      color:#b7ffb7;
+      font-size:11px;
+      line-height:1.25;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    #hudHint{
+      margin-top:8px;
+      font-size:11px;
+      color:rgba(255,255,255,0.70);
     }
   </style>
 </head>
+
 <body>
-  <div id="container">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="three-canvas"></canvas>
-    <div id="status">カメラはまだ開始していません</div>
-    <button id="startBtn">カメラを開始</button>
+  <!-- DEBUG HUD overlay (kept) -->
+  <div id="debugHud">
+    <div id="debugHudHeader">
+      <div id="debugHudTitle">DEBUG HUD (device/camera/detection)</div>
+      <div id="debugHudBtns">
+        <button id="hudCopyBtn" class="hudBtn">Copy</button>
+        <button id="hudLogBtn" class="hudBtn">Log</button>
+        <button id="hudCloseBtn" class="hudBtn">Close</button>
+      </div>
+    </div>
+    <div id="debugHudBody">
+      <pre id="debugText">Loading...</pre>
+      <div id="hudHint">Tip: menu ≡ → enable “Debug HUD” to help compare devices.</div>
+    </div>
   </div>
 
-  <!-- three.js と GLTFLoader（クラシック script 版） -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/loaders/GLTFLoader.js"></script>
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
 
-  <script>
-    const video     = document.getElementById('video');
-    const canvas    = document.getElementById('three-canvas');
-    const statusEl  = document.getElementById('status');
-    const startBtn  = document.getElementById('startBtn');
-    const container = document.getElementById('container');
+    <!-- top bar -->
+    <div id="titleBar">
+      <div id="titleStack">
+        <div class="t1">HALLO – EGG Minimal</div>
+        <div class="t2">Camera + COCO only (no SVG / no 3D). Debug HUD preserved.</div>
+      </div>
+      <div id="pill">Ready</div>
+    </div>
 
-    let scene, camera, renderer;
-    let model = null;
-    let cube  = null;
+    <!-- MENU -->
+    <div id="menuWrapper">
+      <button id="menuToggle">☰</button>
+      <div id="menuPanel" class="hidden">
+        <div class="menu-section">
+          <h3>Camera</h3>
+          <select id="cameraFacing">
+            <option value="environment">Back</option>
+            <option value="user">Front</option>
+          </select>
+          <button id="cameraStartBtn" style="margin-top:8px;">Start / Restart Camera</button>
+          <span id="cameraHint">Tip: allow permission. If black, restart camera.</span>
+        </div>
 
-    function logStatus(msg) {
-      console.log('[STATUS]', msg);
-      statusEl.textContent = msg;
+        <div class="menu-section">
+          <h3>Debug HUD</h3>
+          <select id="debugHudSelect">
+            <option value="off">OFF</option>
+            <option value="on">ON</option>
+          </select>
+          <span>Shows device/secureContext/backend/camera track + EGG detection summary.</span>
+        </div>
+
+        <div class="menu-section">
+          <h3>COCO / EGG</h3>
+          <button id="cocoReloadBtn">Reload COCO</button>
+          <span>Detection class: “egg”. This page only reports EGG yes/no + score.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+
+  // UI
+  const menuToggle = $("menuToggle");
+  const menuPanel  = $("menuPanel");
+  const pill       = $("pill");
+  const cameraFacing = $("cameraFacing");
+  const cameraStartBtn = $("cameraStartBtn");
+  const debugHudSelect = $("debugHudSelect");
+  const cocoReloadBtn  = $("cocoReloadBtn");
+
+  // HUD
+  const debugHud  = $("debugHud");
+  const debugText = $("debugText");
+  const hudCopyBtn  = $("hudCopyBtn");
+  const hudLogBtn   = $("hudLogBtn");
+  const hudCloseBtn = $("hudCloseBtn");
+
+  // Video
+  const video = $("video");
+
+  // State
+  let facing = "environment";
+  let stream = null;
+  let model  = null;
+  let lastEgg = { seen:false, score:0, ts:0 };
+  let detectBusy = false;
+
+  // ===== menu behavior =====
+  menuToggle.addEventListener("click", () => {
+    menuPanel.classList.toggle("hidden");
+  });
+
+  // ===== HUD DEBUG behavior (preserved concept) =====
+  function setHudVisible(on){
+    debugHud.style.display = on ? "block" : "none";
+    debugHudSelect.value = on ? "on" : "off";
+  }
+  debugHudSelect.addEventListener("change", () => {
+    setHudVisible(debugHudSelect.value === "on");
+    updateHud(); // refresh immediately
+  });
+  hudCloseBtn.addEventListener("click", () => setHudVisible(false));
+  hudCopyBtn.addEventListener("click", async () => {
+    try{
+      await navigator.clipboard.writeText(debugText.textContent);
+      pill.textContent = "HUD copied";
+      setTimeout(()=>pill.textContent="Ready", 900);
+    }catch(e){
+      pill.textContent = "Copy failed";
+      setTimeout(()=>pill.textContent="Ready", 900);
     }
+  });
+  hudLogBtn.addEventListener("click", () => {
+    console.log(debugText.textContent);
+    pill.textContent = "HUD logged";
+    setTimeout(()=>pill.textContent="Ready", 900);
+  });
 
-    function initThree() {
-      scene = new THREE.Scene();
-
-      const width  = container.clientWidth || window.innerWidth;
-      const height = container.clientHeight || window.innerHeight;
-
-      const fov = 45;
-      const aspect = width / height;
-      const near = 0.1;
-      const far  = 100;
-      camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-      camera.position.set(0, 0, 3);
-
-      renderer = new THREE.WebGLRenderer({
-        canvas: canvas,
-        alpha: true,
-        antialias: true
-      });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(width, height, false);
-      renderer.setClearColor(0x000000, 0); // 背景は透明（下のカメラ映像を透かす）
-
-      // ライト
-      const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-      scene.add(ambient);
-
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      dirLight.position.set(1, 1, 1);
-      scene.add(dirLight);
-
-      // デバッグ用：必ず見えるカラフルキューブ
-      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-      const boxMat = new THREE.MeshNormalMaterial();
-      cube = new THREE.Mesh(boxGeo, boxMat);
-      scene.add(cube);
-
-      logStatus('Three.js 初期化完了（キューブ表示中／Duck読み込み待機）');
+  // ===== camera =====
+  async function stopCamera(){
+    if(stream){
+      stream.getTracks().forEach(t=>t.stop());
+      stream = null;
     }
+    video.srcObject = null;
+  }
 
-    function onResize() {
-      if (!renderer || !camera) return;
-      const width  = container.clientWidth || window.innerWidth;
-      const height = container.clientHeight || window.innerHeight;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-    }
+  async function startCamera(){
+    await stopCamera();
+    pill.textContent = "Camera…";
+    const constraints = {
+      video: {
+        facingMode: facing,
+        width:  { ideal: 640 },
+        height: { ideal: 480 }
+      },
+      audio:false
+    };
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+    pill.textContent = `Camera: ${facing}`;
+    updateHud();
+  }
 
-    // three.js サンプル Duck を読み込んで、パイプラインを確認
-    function loadModel() {
-      console.log('typeof THREE.GLTFLoader =', typeof THREE.GLTFLoader);
+  cameraFacing.addEventListener("change", () => {
+    facing = cameraFacing.value;
+  });
+  cameraStartBtn.addEventListener("click", () => startCamera().catch(err => showError(err)));
 
-      if (typeof THREE.GLTFLoader === 'undefined') {
-        logStatus('GLTFLoader が読み込めません（キューブのみ表示）');
-        return;
-      }
+  // ===== COCO =====
+  async function loadCoco(){
+    pill.textContent = "COCO loading…";
+    // Prefer WebGL; fall back to CPU automatically if needed
+    try { await tf.setBackend("webgl"); } catch(e) {}
+    await tf.ready();
 
-      const loader = new THREE.GLTFLoader();
-      const duckUrl = 'https://threejs.org/examples/models/gltf/Duck/glTF-Binary/Duck.glb';
+    model = await cocoSsd.load();
+    pill.textContent = "COCO loaded";
+    updateHud();
+  }
 
-      logStatus('3Dモデル読み込み中（three.js 公式 Duck）...');
+  cocoReloadBtn.addEventListener("click", () => {
+    model = null;
+    loadCoco().catch(err => showError(err));
+  });
 
-      loader.load(
-        duckUrl,
-        function (gltf) {
-          console.log('Duck loaded:', gltf);
+  // ===== detection loop (EGG only) =====
+  async function detectOnce(){
+    if(!model || !stream || detectBusy) return;
+    detectBusy = true;
+    try{
+      const preds = await model.detect(video);
+      const egg = preds
+        .filter(p => p.class === "egg")
+        .sort((a,b)=> (b.score||0)-(a.score||0))[0];
 
-          if (cube) {
-            scene.remove(cube);
-            cube = null;
-          }
-          model = gltf.scene;
-          // サンプル Duck はかなり大きいので縮小
-          model.scale.set(0.01, 0.01, 0.01);
-          model.position.set(0, -0.5, 0);
-          model.rotation.set(0, Math.PI, 0);
-          scene.add(model);
-
-          logStatus('表示中：three.js サンプル Duck');
-        },
-        function (xhr) {
-          if (xhr && xhr.total) {
-            const ratio = (xhr.loaded / xhr.total) * 100;
-            logStatus('3Dモデル読み込み中... ' + ratio.toFixed(0) + '%');
-          } else {
-            logStatus('3Dモデル読み込み中...');
-          }
-        },
-        function (error) {
-          console.error('GLB 読み込みエラー', error);
-          logStatus('Duck の読み込みに失敗しました（キューブのみ表示）');
+      if(egg && (egg.score||0) >= 0.30){
+        lastEgg = { seen:true, score: egg.score||0, ts: Date.now() };
+        pill.textContent = `EGG ${(egg.score||0).toFixed(2)}`;
+      }else{
+        // keep a short "memory" so HUD can show recent detection
+        const age = Date.now() - lastEgg.ts;
+        if(age > 1200){
+          lastEgg = { seen:false, score:0, ts:0 };
+          pill.textContent = "Ready";
+        }else{
+          pill.textContent = `EGG recent ${(lastEgg.score||0).toFixed(2)}`;
         }
-      );
+      }
+    }catch(err){
+      showError(err);
+    }finally{
+      detectBusy = false;
+    }
+    updateHud();
+  }
+
+  function loop(){
+    detectOnce();
+    // Throttle a bit for mobile stability
+    setTimeout(loop, 140);
+  }
+
+  // ===== HUD content =====
+  function updateHud(){
+    if(debugHud.style.display === "none") return;
+
+    const ua = navigator.userAgent;
+    const protocol = location.protocol;
+    const secure = (typeof window.isSecureContext === "boolean") ? window.isSecureContext : "unknown";
+    const backend = (window.tf && tf.getBackend) ? tf.getBackend() : "unknown";
+
+    let camLine = "CAMERA: not started";
+    if(stream){
+      const track = stream.getVideoTracks()[0];
+      const s = track.getSettings ? track.getSettings() : {};
+      camLine =
+        `CAMERA:\n`+
+        `  facing: ${facing}\n`+
+        `  label: ${track.label || "(no label yet)"}\n`+
+        `  ${s.width||"?"}x${s.height||"?"} @ ${s.frameRate||"?"}fps\n`+
+        `  deviceId: ${s.deviceId ? (s.deviceId.slice(0,8)+"…") : "(n/a)"}`;
     }
 
-    function animate() {
-      requestAnimationFrame(animate);
+    const eggLine = lastEgg.seen
+      ? `EGG: YES score=${lastEgg.score.toFixed(2)} ageMs=${Date.now()-lastEgg.ts}`
+      : `EGG: no`;
 
-      if (cube) {
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.02;
-      }
-      if (model) {
-        model.rotation.y += 0.01;
-      }
+    debugText.textContent =
+`=== DEVICE / SECURITY ===
+UA: ${ua}
+protocol: ${protocol}
+isSecureContext: ${secure}
 
-      if (renderer && camera && scene) {
-        renderer.render(scene, camera);
-      }
+=== TF BACKEND ===
+backend: ${backend}
+
+=== ${camLine} ===
+
+=== DETECTION ===
+${eggLine}`;
+  }
+
+  function showError(err){
+    console.error(err);
+    pill.textContent = "Error";
+    if(debugHud.style.display !== "none"){
+      debugText.textContent = "ERROR:\n" + (err && err.message ? err.message : String(err));
     }
+  }
 
-    function startApp() {
-      startBtn.disabled = true;
-      startBtn.textContent = '起動中...';
+  // ===== init =====
+  (async function init(){
+    // menu default: hidden, HUD default: OFF (same spirit as your full build)
+    menuPanel.classList.add("hidden");
+    setHudVisible(false);
 
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        logStatus('このブラウザはカメラに対応していません');
-        startBtn.disabled = false;
-        startBtn.textContent = '再試行';
-        return;
-      }
+    // sensible defaults
+    facing = "environment";
+    cameraFacing.value = "environment";
 
-      logStatus('カメラ起動中...');
-
-      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        .then(function (stream) {
-          video.srcObject = stream;
-          video.onloadedmetadata = function () {
-            video.play();
-            logStatus('カメラ起動成功（キューブ表示 → Duck 読み込み開始）');
-
-            initThree();
-            onResize();
-            animate();
-            loadModel();
-
-            startBtn.style.display = 'none';
-          };
-        })
-        .catch(function (e) {
-          console.error(e);
-          logStatus('カメラ起動に失敗しました: ' + e.name + ' / ' + e.message);
-          startBtn.disabled = false;
-          startBtn.textContent = '再試行';
-        });
+    // start camera + load model
+    try{
+      await startCamera();
+      await loadCoco();
+      loop();
+    }catch(err){
+      showError(err);
     }
-
-    startBtn.addEventListener('click', startApp);
-    window.addEventListener('resize', onResize);
-  </script>
+  })();
+})();
+</script>
 </body>
 </html>
