@@ -911,10 +911,14 @@
         }
       });
 
-      // Duck trigger: PEN only (EGG disabled for today)
-      if (dominant === 'pen' && bestScore >= 0.30) {
-        duckShowFor(3000);
-      }
+    // Duck trigger: PEN test (COCO reality-adjusted)
+if (
+  (dominant === 'pen' || dominant === 'phone') &&
+  bestScore >= 0.30
+) {
+  duckShowFor(3000);
+}
+    
 
       // ----- custom model override (full-frame) -----
       lastCustom = { label:'(none)', score:0, used:false, note:'' };
