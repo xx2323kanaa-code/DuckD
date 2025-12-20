@@ -1,1031 +1,176 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>Colorful Custom Hand AI Project (fcAI) + DIY Mode</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Duck Prosthesis UI – SAFE CAMERA START</title>
 
-  <!-- ====== External libs: TensorFlow.js (modular) + COCO-SSD + (DIY) MobileNet + Layers ====== -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu"></script>
+<!-- TF (後で使う。今は起動しない) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
 
-  <!-- DIY needs layers + mobilenet -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-layers"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+<style>
+html,body{
+  margin:0; padding:0;
+  width:100%; height:100%;
+  background:#111;
+  overflow:hidden;
+  font-family: system-ui, sans-serif;
+}
 
-  <!-- COCO-SSD -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+/* ===== main view ===== */
+#stage{
+  position:relative;
+  width:100%;
+  height:100%;
+  background:#111;
+}
 
-  <!-- Babylon.js (Duck overlay) -->
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+#handImage{
+  position:absolute;
+  inset:0;
+  background:url("hand_open.png") center/contain no-repeat;
+}
 
-  <style>
-    /* =========================================
-       Global Theme (ARCH-style)
-    ========================================= */
-    body {
-      margin: 0;
-      padding: 0;
-      background: #111;
-      color: #fff;
-      font-family: Arial, sans-serif;
-    }
+/* ===== camera ===== */
+#video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:none;
+}
 
-    /* =========================================
-       Header / Title
-    ========================================= */
-    header {
-      padding: 10px 12px;
-      background: #0b0b0b;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    header h1 {
-      margin: 0;
-      font-size: 18px;
-      letter-spacing: 0.5px;
-    }
-    header p {
-      margin: 4px 0 0 0;
-      font-size: 12px;
-      color: rgba(255,255,255,0.75);
-    }
+/* ===== menu ===== */
+#menuBtn{
+  position:fixed;
+  top:10px; right:10px;
+  z-index:1000;
+  width:44px; height:36px;
+  border-radius:10px;
+  border:1px solid #888;
+  background:#222;
+  color:#fff;
+  font-size:18px;
+}
 
-    /* =========================================
-       Menu / Panel Controls
-    ========================================= */
-    #topControls {
-      margin-top: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+#menu{
+  position:fixed;
+  top:52px; right:10px;
+  z-index:1000;
+  background:#222;
+  border:1px solid #555;
+  border-radius:12px;
+  padding:10px;
+  display:none;
+  width:220px;
+}
 
-    #menuToggle {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      border-radius: 10px;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    #menuToggle:active {
-      transform: translateY(1px);
-    }
+#menu button{
+  width:100%;
+  margin-bottom:8px;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid #666;
+  background:#333;
+  color:#fff;
+  font-size:14px;
+}
 
-    #menuPanel {
-      display: none;
-      width: 100%;
-      padding: 10px;
-      border-radius: 12px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.1);
-      box-sizing: border-box;
-    }
-    #menuPanel.open {
-      display: block;
-    }
-
-    .menuSection {
-      margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .menuSection:last-child {
-      border-bottom: none;
-      margin-bottom: 0;
-      padding-bottom: 0;
-    }
-    .menuSection h3 {
-      margin: 0 0 8px 0;
-      font-size: 13px;
-      font-weight: 700;
-      color: rgba(255,255,255,0.92);
-    }
-
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-size: 12px;
-      color: rgba(255,255,255,0.85);
-    }
-
-    select, button, input[type="range"], input[type="checkbox"] {
-      font-size: 14px;
-    }
-
-    select {
-      width: 100%;
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(0,0,0,0.35);
-      color: #fff;
-      outline: none;
-    }
-
-    .row2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .btnRow {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .smallHint {
-      margin-top: 6px;
-      font-size: 11px;
-      color: rgba(255,255,255,0.65);
-      line-height: 1.35;
-    }
-
-    .actionBtn {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      border-radius: 10px;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-size: 14px;
-      user-select: none;
-    }
-    .actionBtn:active { transform: translateY(1px); }
-
-    /* Simulation buttons */
-    .sim-btn {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      border-radius: 10px;
-      padding: 8px 10px;
-      cursor: pointer;
-      font-size: 13px;
-      user-select: none;
-    }
-    .sim-btn:active { transform: translateY(1px); }
-
-    #simEgg   { background: #fff; color: #000; } /* Egg demo button: white */
-    #simPen   { background: #cfe7ff; color: #000; }
-    #simPhone { background: #ffe1c1; color: #000; }
-    #simCoin  { background: #d8ffd8; color: #000; }
-    #simKey   { background: #e9d8ff; color: #000; }
-    #simNone  { background: rgba(255,255,255,0.06); color: #fff; }
-
-    /* =========================================
-       Main Application Area
-    ========================================= */
-    #appContainer {
-      width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-    }
-
-    /* ======== Video + RenderCanvas + Overlay ======== */
-    #videoWrapper {
-      width: 100%;
-      max-width: 420px;
-      margin: 0 auto;
-      position: relative;
-      overflow: hidden;
-      border-radius: 10px;
-      aspect-ratio: 3 / 4;
-      background: #000;
-    }
-
-    /* video is only for capture (hidden) */
-    #video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    /* render canvas shows video + bbox (MediaPipe style) */
-    #renderCanvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      pointer-events: none;
-    }
-
-    /* duck overlay (Babylon WebGL) */
-    #duckCanvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2; /* same as renderCanvas; DOM order decides stacking */
-      pointer-events: none;
-      background: transparent;
-    }
-
-    #overlaySvg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 3;
-      pointer-events: none;
-    }
-
-    /* =========================================
-       DEBUG HUD (Head-Up Display)
-    ========================================= */
-    #debugHud {
-      position: fixed;
-      top: 8px;
-      left: 8px;
-      width: min(520px, calc(100vw - 16px));
-      max-height: min(46vh, calc(100vh - 16px));
-      z-index: 9999;
-      background: rgba(0,0,0,0.62);
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 12px;
-      overflow: hidden;
-      display: none;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-    }
-    #debugHudHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.12);
-    }
-    #debugHudHeader .title {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-      color: rgba(255,255,255,0.95);
-    }
-    #debugHudHeader .hudBtns {
-      display: flex;
-      gap: 8px;
-    }
-    .hudBtn {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      border-radius: 10px;
-      padding: 6px 10px;
-      cursor: pointer;
-      font-size: 12px;
-      user-select: none;
-    }
-    .hudBtn:active { transform: translateY(1px); }
-    #debugHudBody {
-      padding: 10px;
-      overflow: auto;
-      max-height: calc(46vh - 44px);
-    }
-    #debugHud pre {
-      margin: 0;
-      font-size: 11px;
-      line-height: 1.35;
-      white-space: pre-wrap;
-      color: #b9ffb9;
-    }
-
-    /* =========================================
-       Bottom info area
-    ========================================= */
-    #statusBar {
-      margin: 10px auto 0 auto;
-      width: 100%;
-      max-width: 420px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-    }
-    #result, #status {
-      font-size: 13px;
-      color: rgba(255,255,255,0.9);
-    }
-    #status {
-      color: rgba(255,255,255,0.7);
-      font-size: 12px;
-    }
-
-    /* =========================================
-       DIY Panel
-    ========================================= */
-    #diyPanel {
-      width: 100%;
-      max-width: 420px;
-      margin: 10px auto 0 auto;
-      padding: 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.03);
-      display: none;
-      box-sizing: border-box;
-    }
-    #diyPanel.active { display: block; }
-
-    #diyPanel h2 {
-      margin: 0 0 8px 0;
-      font-size: 14px;
-      font-weight: 800;
-    }
-    #diyLog {
-      margin-top: 8px;
-      font-size: 11px;
-      line-height: 1.35;
-      color: rgba(255,255,255,0.75);
-      white-space: pre-wrap;
-      max-height: 160px;
-      overflow: auto;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      padding: 8px;
-      background: rgba(0,0,0,0.25);
-    }
-
-    .diyRow { display:flex; gap:10px; flex-wrap:wrap; }
-    .diyBtn {
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      border-radius: 10px;
-      padding: 8px 10px;
-      cursor: pointer;
-      font-size: 13px;
-      user-select: none;
-    }
-    .diyBtn:active { transform: translateY(1px); }
-    .diyBtn.primary { background: rgba(80,160,255,0.25); border-color: rgba(80,160,255,0.4); }
-    .diyBtn.warn { background: rgba(255,160,80,0.22); border-color: rgba(255,160,80,0.35); }
-
-    /* =========================================
-       Footer spacing
-    ========================================= */
-    .spacer { height: 18px; }
-
-  </style>
+/* ===== HUD ===== */
+#hud{
+  position:fixed;
+  top:10px; left:10px;
+  max-width:85%;
+  background:rgba(0,0,0,0.7);
+  border:1px solid #0f0;
+  border-radius:10px;
+  padding:8px;
+  color:#9f9;
+  font-size:11px;
+  white-space:pre-wrap;
+  display:none;
+  z-index:900;
+}
+</style>
 </head>
 
 <body>
-
-<header>
-  <h1>Colorful Custom Hand AI Project (fcAI) + DIY Mode</h1>
-  <p>Myoelectric prosthesis training prototype: body alignment + slow voice/manual control.</p>
-
-  <div id="topControls">
-    <button id="menuToggle">☰ Menu</button>
-
-    <div id="menuPanel">
-      <div class="menuSection">
-        <h3>Camera</h3>
-        <div class="row2">
-          <div>
-            <label for="cameraSelect">Camera device</label>
-            <select id="cameraSelect"></select>
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="refreshCamsBtn" class="actionBtn">Refresh Cameras</button>
-          </div>
-        </div>
-        <div class="smallHint">Tip: Use HTTPS + allow camera permission. On phones, try switching cameras if front opens unexpectedly.</div>
-      </div>
-
-      <div class="menuSection">
-        <h3>HUD / Debug</h3>
-        <div class="row2">
-          <div>
-            <label for="debugHudSelect">HUD Debug</label>
-            <select id="debugHudSelect">
-              <option value="off">OFF</option>
-              <option value="on">ON</option>
-            </select>
-          </div>
-          <div>
-            <label for="basicSelect">Basic HUD overlay</label>
-            <select id="basicSelect">
-              <option value="off">OFF</option>
-              <option value="on">ON</option>
-            </select>
-          </div>
-        </div>
-        <div class="smallHint">HUD Debug shows device/security/camera/backend. Basic HUD is minimal on-screen status.</div>
-      </div>
-
-      <div class="menuSection">
-        <h3>Detection</h3>
-        <div class="row2">
-          <div>
-            <label for="scoreThr">Score threshold</label>
-            <input id="scoreThr" type="range" min="0.05" max="0.95" step="0.01" value="0.30" />
-            <div class="smallHint">Higher = stricter. Default 0.30.</div>
-          </div>
-          <div>
-            <label for="stabilityFrames">Stability frames</label>
-            <input id="stabilityFrames" type="range" min="1" max="30" step="1" value="10" />
-            <div class="smallHint">Needs same label for N frames.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="menuSection">
-        <h3>Manual / Simulation</h3>
-        <div class="btnRow">
-          <button id="simEgg" class="sim-btn">EGG</button>
-          <button id="simPen" class="sim-btn">PEN</button>
-          <button id="simPhone" class="sim-btn">PHONE</button>
-          <button id="simCoin" class="sim-btn">COIN</button>
-          <button id="simKey" class="sim-btn">KEY</button>
-          <button id="simNone" class="sim-btn">NONE</button>
-        </div>
-        <div class="smallHint">Simulation forces pose for 2s (demo freeze). Used for testing without object.</div>
-      </div>
-
-      <div class="menuSection">
-        <h3>DIY Custom Model</h3>
-        <div class="btnRow">
-          <button id="diyOpenBtn" class="diyBtn primary">Open DIY</button>
-          <button id="diyPresetBtn" class="diyBtn">Preset: EGG / PEN / PHONE / COIN / KEY / BASIC</button>
-        </div>
-        <div class="smallHint">DIY = train a lightweight classifier on your own images. (Keeps COCO as baseline.)</div>
-      </div>
-
-    </div>
-  </div>
-</header>
-
-<div id="debugHud">
-  <div id="debugHudHeader">
-    <div class="title">HUD DEBUG</div>
-    <div class="hudBtns">
-      <button id="hudCopyBtn" class="hudBtn">Copy</button>
-      <button id="hudLogBtn" class="hudBtn">Log</button>
-      <button id="hudCloseBtn" class="hudBtn">Close</button>
-    </div>
-  </div>
-  <div id="debugHudBody">
-    <pre id="hudPre">Loading...</pre>
-  </div>
+<div id="stage">
+  <div id="handImage"></div>
+  <video id="video" autoplay muted playsinline></video>
 </div>
 
-<div id="appContainer">
-  <div id="videoWrapper">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="renderCanvas"></canvas>
-    <canvas id="duckCanvas"></canvas>
+<button id="menuBtn">☰</button>
 
-    <!-- ===== hand overlay (ARCH style) ===== -->
-    <svg id="overlaySvg" viewBox="0 0 220 220" preserveAspectRatio="xMidYMid meet">
-      <!-- (overlay content continues...) -->
-      <!-- NOTE: Original content preserved. -->
-      <!-- =========================================
-           BASIC HUD text overlay (inside SVG)
-      ========================================= -->
-      <text id="overlayHud"
-            x="8" y="16"
-            font-family="monospace"
-            font-size="10"
-            fill="#b9ffb9"
-            opacity="0.92">HUD</text>
-
-      <!-- (many paths/groups omitted here only in this preview block; full file continues below) -->
-
-      <!-- (SVG full content continues in the original file) -->
-      <!-- =========================================================
-           (Original SVG hand definitions / groups / joints)
-      ========================================================= -->
-      <!-- The rest of the SVG is preserved from your index (3).html -->
-    </svg>
-  </div>
-
-  <div id="statusBar">
-    <div id="result">Result: (none)</div>
-    <div id="status">Status: waiting...</div>
-  </div>
-
-  <div id="diyPanel">
-    <h2>DIY Mode</h2>
-    <div class="diyRow">
-      <button id="diyCaptureBtn" class="diyBtn primary">Capture</button>
-      <button id="diyTrainBtn" class="diyBtn primary">Train</button>
-      <button id="diyEvaluateBtn" class="diyBtn">Evaluate</button>
-      <button id="diyDeployBtn" class="diyBtn warn">Deploy</button>
-    </div>
-    <div class="diyRow" style="margin-top:8px;">
-      <button id="diyApproveBtn" class="diyBtn primary">Approve</button>
-      <button id="diyExitBtn" class="diyBtn">Exit</button>
-    </div>
-    <div class="smallHint" style="margin-top:8px;">
-      Model state: <b id="diyModelState">none</b>
-    </div>
-    <div id="diyLog"></div>
-  </div>
-
-  <div class="spacer"></div>
-
-  <div style="width:100%;max-width:420px;margin:0 auto;">
-    <button id="startCameraBtn" class="actionBtn" style="width:100%;">Start Camera</button>
-  </div>
-
+<div id="menu">
+  <button id="startCam">▶ Start Camera</button>
+  <button id="stopCam">⏹ Stop / Reset</button>
+  <button id="toggleHud">🐞 Debug HUD</button>
+  <button id="copyHud">📋 Copy HUD</button>
 </div>
+
+<div id="hud">HUD ready</div>
 
 <script>
-(() => {
-  // ======== DOM references ========
-  const video        = document.getElementById('video');
-  const renderCanvas = document.getElementById('renderCanvas');
-  const renderCtx    = renderCanvas.getContext('2d');
+/* ===== state ===== */
+let stream = null;
+let hudOn = false;
+let hudLogs = [];
 
-  // ======== Duck overlay (Babylon) ========
-  const duckCanvas   = document.getElementById('duckCanvas');
+/* ===== elements ===== */
+const video = document.getElementById("video");
+const hand  = document.getElementById("handImage");
+const hud   = document.getElementById("hud");
+const menu  = document.getElementById("menu");
 
-  let duckEngine = null;
-  let duckScene  = null;
-  let duckRoot   = null;
-  let duckVisibleUntil = 0;
+/* ===== menu ===== */
+document.getElementById("menuBtn").onclick = ()=>{
+  menu.style.display = menu.style.display==="block" ? "none":"block";
+};
 
-  function duckShowFor(ms = 3000) {
-    duckVisibleUntil = performance.now() + ms;
-  }
-
-  function initDuckOverlay() {
-    // If Babylon isn't loaded or canvas missing, fail silently (keep HUD/debug intact)
-    if (!duckCanvas || typeof BABYLON === 'undefined') return;
-    if (duckEngine) return; // prevent double init
-
-    duckEngine = new BABYLON.Engine(duckCanvas, true, { preserveDrawingBuffer: true, stencil: true });
-    duckScene = new BABYLON.Scene(duckEngine);
-    duckScene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
-
-    const cam = new BABYLON.ArcRotateCamera(
-      'duckCam',
-      Math.PI / 2,
-      Math.PI / 2.2,
-      2.0,
-      BABYLON.Vector3.Zero(),
-      duckScene
-    );
-    cam.attachControl(duckCanvas, false);
-
-    new BABYLON.HemisphericLight('duckLight', new BABYLON.Vector3(0, 1, 0), duckScene);
-
-    const candidates = ['duck.glb', 'Duck.glb'];
-    const tryLoad = (i) => {
-      if (i >= candidates.length) {
-        // can't load duck; keep running with transparent scene
-        return;
-      }
-      BABYLON.SceneLoader.Append(
-        './',
-        candidates[i],
-        duckScene,
-        () => {
-          // prefer the Babylon root mesh if present
-          duckRoot = duckScene.meshes.find(m => m.name === '__root__') || duckScene.meshes[0] || null;
-          if (duckRoot) duckRoot.setEnabled(false);
-        },
-        undefined,
-        () => {
-          // try next filename (case-sensitive on GitHub Pages)
-          tryLoad(i + 1);
-        }
-      );
-    };
-    tryLoad(0);
-
-    duckEngine.runRenderLoop(() => {
-      const now = performance.now();
-      if (duckRoot) duckRoot.setEnabled(now < duckVisibleUntil);
-      duckScene.render();
-    });
-
-    window.addEventListener('resize', () => duckEngine && duckEngine.resize());
-  }
-
-  const resultEl     = document.getElementById('result');
-  const statusEl     = document.getElementById('status');
-  const hudText      = document.getElementById('overlayHud');
-
-  const menuToggle   = document.getElementById('menuToggle');
-  const menuPanel    = document.getElementById('menuPanel');
-
-  const cameraSelect = document.getElementById('cameraSelect');
-  const refreshCamsBtn = document.getElementById('refreshCamsBtn');
-
-  const debugHudSelect = document.getElementById('debugHudSelect');
-  const basicSelect  = document.getElementById('basicSelect');
-
-  const scoreThrEl = document.getElementById('scoreThr');
-  const stabilityFramesEl = document.getElementById('stabilityFrames');
-
-  const hudPre = document.getElementById('hudPre');
-  const hudCopyBtn = document.getElementById('hudCopyBtn');
-  const hudLogBtn  = document.getElementById('hudLogBtn');
-  const hudCloseBtn = document.getElementById('hudCloseBtn');
-  const debugHud = document.getElementById('debugHud');
-
-  const simEggBtn = document.getElementById('simEgg');
-  const simPenBtn = document.getElementById('simPen');
-  const simPhoneBtn = document.getElementById('simPhone');
-  const simCoinBtn  = document.getElementById('simCoin');
-  const simKeyBtn   = document.getElementById('simKey');
-  const simNoneBtn  = document.getElementById('simNone');
-
-  const diyPanel = document.getElementById('diyPanel');
-  const diyOpenBtn = document.getElementById('diyOpenBtn');
-  const diyExitBtn = document.getElementById('diyExitBtn');
-  const diyCaptureBtn = document.getElementById('diyCaptureBtn');
-  const diyTrainBtn = document.getElementById('diyTrainBtn');
-  const diyEvaluateBtn = document.getElementById('diyEvaluateBtn');
-  const diyDeployBtn = document.getElementById('diyDeployBtn');
-  const diyApproveBtn = document.getElementById('diyApproveBtn');
-  const diyPresetBtn = document.getElementById('diyPresetBtn');
-  const diyLogEl = document.getElementById('diyLog');
-  const diyModelStateEl = document.getElementById('diyModelState');
-
-  const startCameraBtn = document.getElementById('startCameraBtn');
-
-  // ======== State ========
-  let stream = null;
-  let cocoModel = null;
-
-  let useHudDebug = false;
-  let useBasicHud = false;
-
-  let scoreThr = parseFloat(scoreThrEl.value);
-  let stabilityFrames = parseInt(stabilityFramesEl.value, 10);
-
-  let currentGroup = 'none'; // 'none' | 'egg' | 'pen' | 'phone' | 'key' | 'salute' | etc.
-  let bestLabelStable = 'none';
-  let stableCount = 0;
-
-  let lastDetected = { label: 'none', score: 0, group: 'none' };
-  let latestHudLine = '';
-
-  // Demo freeze
-  let demoUntil = 0;
-
-  // Lock behavior
-  let lockActive = false;
-
-  // ======== (Original code continues unchanged below) ========
-
- // ============================================================
-  // (ORIGINAL: menu, HUD, camera enumeration, DIY, etc.)
-  // ============================================================
-
-  // ======== Menu toggle ========
-  menuToggle.addEventListener('click', () => {
-    menuPanel.classList.toggle('open');
-  });
-
-  // ======== HUD DEBUG visibility ========
-  function setHudVisible(on) {
-    useHudDebug = on;
-    debugHud.style.display = on ? 'block' : 'none';
-  }
-
-  function setBasicHudVisible(on) {
-    useBasicHud = on;
-    hudText.style.display = on ? 'block' : 'none';
-  }
-
-  debugHudSelect.addEventListener('change', () => {
-    setHudVisible(debugHudSelect.value === 'on');
-    updateHud();
-  });
-
-  basicSelect.addEventListener('change', () => {
-    setBasicHudVisible(basicSelect.value === 'on');
-    updateHud();
-  });
-
-  hudCloseBtn.addEventListener('click', () => {
-    setHudVisible(false);
-    debugHudSelect.value = 'off';
-  });
-
-  hudCopyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(hudPre.textContent);
-      latestHudLine = 'HUD copied.';
-      updateHud();
-    } catch (e) {
-      latestHudLine = 'Copy failed.';
-      updateHud();
-    }
-  });
-
-  hudLogBtn.addEventListener('click', () => {
-    console.log(hudPre.textContent);
-    latestHudLine = 'HUD logged to console.';
-    updateHud();
-  });
-
-  // ======== Slider updates ========
-  scoreThrEl.addEventListener('input', () => {
-    scoreThr = parseFloat(scoreThrEl.value);
-    latestHudLine = `scoreThr=${scoreThr.toFixed(2)}`;
-    updateHud();
-  });
-
-  stabilityFramesEl.addEventListener('input', () => {
-    stabilityFrames = parseInt(stabilityFramesEl.value, 10);
-    latestHudLine = `stabilityFrames=${stabilityFrames}`;
-    updateHud();
-  });
-
-  // ======== Camera enumeration ========
-  async function refreshCameras() {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d => d.kind === 'videoinput');
-    cameraSelect.innerHTML = '';
-    cams.forEach((c, idx) => {
-      const opt = document.createElement('option');
-      opt.value = c.deviceId;
-      opt.textContent = c.label || `Camera ${idx+1}`;
-      cameraSelect.appendChild(opt);
-    });
-  }
-
-  refreshCamsBtn.addEventListener('click', async () => {
-    await refreshCameras();
-    latestHudLine = 'Cameras refreshed.';
-    updateHud();
-  });
-
-  // ======== Start / Stop camera ========
-  async function stopCamera() {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop());
-      stream = null;
-    }
-  }
-
-  async function startCamera() {
-    await stopCamera();
-    const deviceId = cameraSelect.value || undefined;
-    const constraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
-      audio: false
-    };
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
-    video.srcObject = stream;
-
-    await video.play();
-
-    // Canvas sizing
-    const vw = video.videoWidth || 480;
-    const vh = video.videoHeight || 640;
-    renderCanvas.width = vw;
-    renderCanvas.height = vh;
-
-    latestHudLine = 'Camera started.';
-    updateHud();
-  }
-
-  startCameraBtn.addEventListener('click', async () => {
-    try {
-      statusEl.textContent = 'Status: starting camera...';
-      await startCamera();
-      statusEl.textContent = 'Status: camera OK';
-    } catch (e) {
-      statusEl.textContent = 'Status: camera FAILED';
-      latestHudLine = 'Camera error: ' + (e && e.message ? e.message : String(e));
-      updateHud();
-    }
-  });
-
-  // ======== COCO load ========
-  async function loadCoco() {
-    if (cocoModel) return;
-    statusEl.textContent = 'Status: loading COCO...';
-    await tf.setBackend('webgl');
-    await tf.ready();
-    cocoModel = await cocoSsd.load();
-    statusEl.textContent = 'Status: COCO ready';
-    latestHudLine = 'COCO ready';
-    updateHud();
-  }
-
-  // ======== Detection loop ========
-  let detectCount = 0;
-  let lastDetectAt = 0;
-
-  async function loop() {
-    const now = performance.now();
-
-    if (!cocoModel) {
-      await loadCoco();
-      setTimeout(loop, 200);
-      return;
-    }
-
-    // Demo freeze keeps current pose visible
-    if (now < demoUntil) {
-      latestHudLine = 'DEMO freeze (2s)';
-      setTimeout(loop, 200);
-      return;
-    }
-
-    if (lockActive) {
-      latestHudLine = 'Locked: detection paused.';
-      setTimeout(loop, 200);
-      return;
-    }
-
-    if (!stream) {
-      latestHudLine = 'No camera stream.';
-      setTimeout(loop, 400);
-      updateHud();
-      return;
-    }
-
-    // Run every ~150ms
-    if (now - lastDetectAt < 150) {
-      setTimeout(loop, 60);
-      return;
-    }
-    lastDetectAt = now;
-
-    try {
-      const predictions = await cocoModel.detect(video);
-      detectCount++;
-
-      // Draw video frame to renderCanvas
-      renderCtx.clearRect(0,0,renderCanvas.width,renderCanvas.height);
-      renderCtx.drawImage(video, 0, 0, renderCanvas.width, renderCanvas.height);
-
-      // Extract groups from COCO predictions
-      const objects = predictions
-        .filter(p => p.score >= scoreThr)
-        .map(p => {
-          let group = 'none';
-          const cls = (p.class || '').toLowerCase();
-          if (cls.includes('cell phone') || cls === 'cell phone' || cls === 'phone') group = 'phone';
-          else if (cls.includes('pen')) group = 'pen';
-          else if (cls.includes('key')) group = 'key';
-          else if (cls.includes('egg')) group = 'egg';
-          return {
-            label: cls,
-            score: p.score,
-            bbox: p.bbox,
-            group
-          };
-        });
-
-      // Draw bboxes
-      renderCtx.save();
-      renderCtx.lineWidth = 2;
-      renderCtx.strokeStyle = 'rgba(80,160,255,0.95)';
-      renderCtx.fillStyle = 'rgba(80,160,255,0.12)';
-      objects.forEach(o => {
-        const [x,y,w,h] = o.bbox;
-        renderCtx.fillRect(x,y,w,h);
-        renderCtx.strokeRect(x,y,w,h);
-      });
-      renderCtx.restore();
-
-      let dominant = 'none';
-      let bestScore = 0;
-      objects.forEach(o => {
-        if (['phone','pen','key'].includes(o.group)) {
-          if (o.score > bestScore) {
-            bestScore = o.score;
-            dominant = o.group;
-          }
-        }
-      });
-
-    // Duck trigger: PEN test (COCO reality-adjusted)
-if (
-  (dominant === 'pen' || dominant === 'phone') &&
-  bestScore >= 0.30
-) {
-  duckShowFor(3000);
+/* ===== HUD ===== */
+function logHUD(text){
+  hudLogs.push(text);
+  if(hudLogs.length > 50) hudLogs.shift(); // 自動破棄
+  hud.textContent = hudLogs.join("\n");
 }
-    
 
-      // ----- custom model override (full-frame) -----
-      lastCustom = { label:'(none)', score:0, used:false, note:'' };
-      if (useCustomModel && customClassifier) {
-        const c = await classifyCustomFullFrame();
-        // (Original override logic preserved)
-      }
+document.getElementById("toggleHud").onclick = ()=>{
+  hudOn = !hudOn;
+  hud.style.display = hudOn ? "block":"none";
+};
 
-      // ======== Stability (freeze) ========
-      // (Original stability / freeze logic preserved)
-      // ...
-// (Original: apply pose, update UI, update HUD, DIY controls, etc.)
-      // (Original file preserved; only Duck-related additions already included above.)
+document.getElementById("copyHud").onclick = async ()=>{
+  await navigator.clipboard.writeText(hud.textContent);
+};
 
-    } catch (e) {
-      latestHudLine = 'Detect error: ' + (e && e.message ? e.message : String(e));
-      updateHud();
-    }
+/* ===== camera ===== */
+document.getElementById("startCam").onclick = async ()=>{
+  if(stream) return;
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:"environment", width:640, height:480 },
+    audio:false
+  });
+  video.srcObject = stream;
+  video.style.display = "block";
+  hand.style.display = "none";
 
-    setTimeout(loop, 120);
+  logHUD("Camera started");
+  logHUD("secure: "+window.isSecureContext);
+  logHUD("UA: "+navigator.userAgent);
+};
+
+document.getElementById("stopCam").onclick = ()=>{
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
   }
-
-  // ======== Simulation buttons (original) ========
-  simEggBtn.addEventListener('click', () => {
-    // (Original) Force egg pose for demo freeze
-    demoUntil = performance.now() + 2000;
-    currentGroup = 'egg';
-    latestHudLine = 'SIM: egg (2s)';
-    updateHud();
-  });
-
-  simPenBtn.addEventListener('click', () => {
-    demoUntil = performance.now() + 2000;
-    currentGroup = 'pen';
-    latestHudLine = 'SIM: pen (2s)';
-    updateHud();
-  });
-
-  simPhoneBtn.addEventListener('click', () => {
-    demoUntil = performance.now() + 2000;
-    currentGroup = 'phone';
-    latestHudLine = 'SIM: phone (2s)';
-    updateHud();
-  });
-
-  simCoinBtn.addEventListener('click', () => {
-    demoUntil = performance.now() + 2000;
-    currentGroup = 'coin';
-    latestHudLine = 'SIM: coin (2s)';
-    updateHud();
-  });
-
-  simKeyBtn.addEventListener('click', () => {
-    demoUntil = performance.now() + 2000;
-    currentGroup = 'key';
-    latestHudLine = 'SIM: key (2s)';
-    updateHud();
-  });
-
-  simNoneBtn.addEventListener('click', () => {
-    demoUntil = 0;
-    currentGroup = 'none';
-    latestHudLine = 'SIM: none';
-    updateHud();
-  });
-
-  // ============================================================
-  // (Original: DIY mode implementation preserved)
-  // ============================================================
-
-  // ======== HUD updater (original) ========
-  function updateHud() {
-    // (Original HUD content preserved)
-    // It already prints: UA / secure / backend / camera settings / detection etc.
-  }
-
-  // ======== Boot ========
-  (async () => {
-    try {
-      // Camera list may require permission on some devices; still refresh list
-      await refreshCameras().catch(()=>{});
-
-      // Duck overlay (Babylon)
-      initDuckOverlay();
-
-      // Default HUD OFF (menu selectable)
-      setHudVisible(false);
-      updateHud();
-
-      // Try auto-load custom model silently (doesn't enable)
-      await loadCustomModelIfAvailable().catch(()=>{});
-      diyModelStateEl.textContent = localStorage.getItem(CUSTOM_META_KEY) ? 'deployed' : 'none';
-
-      // start loop (COCO loads lazily)
-      loop();
-
-      statusEl.textContent = 'Status: ready. Press Start Camera.';
-    } catch (e) {
-      statusEl.textContent = 'Status: init error';
-      latestHudLine = 'Init error: ' + (e && e.message ? e.message : String(e));
-      updateHud();
-    }
-  })();
-
-})();
+  video.style.display = "none";
+  hand.style.display = "block";
+  logHUD("Camera stopped / reset");
+};
 </script>
-
 </body>
 </html>
-    
