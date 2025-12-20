@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>DUCK MODE – Camera + COCO + Babylon</title>
+<title>Colorful JapanD – DUCK MODE</title>
 
 <!-- TF + COCO -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
@@ -16,140 +16,146 @@
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 
 <style>
-html,body{margin:0;padding:0;background:#111;color:#fff;font-family:system-ui}
-#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;display:none}
-
-/* Hand PNG (background of duck) */
-#handImg{
-  position:fixed;bottom:20px;left:50%;
-  transform:translateX(-50%);
-  width:260px;height:260px;
-  display:none;z-index:45;opacity:0.95;
+html,body{
+  margin:0;padding:0;
+  background:#111;color:#fff;
+  font-family:system-ui;
 }
 
-/* Duck */
-#duckCanvas{
-  position:fixed;bottom:20px;left:50%;
+/* ===== Title ===== */
+#title{
+  position:fixed;top:8px;left:50%;
   transform:translateX(-50%);
-  width:260px;height:260px;
-  display:none;z-index:50;
+  font-weight:700;
+  z-index:200;
+}
+
+/* ===== Round window ===== */
+#round{
+  position:fixed;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  width:300px;height:300px;
+  border-radius:50%;
+  overflow:hidden;
+  background:#000;
+  z-index:10;
+}
+
+/* Camera */
+#video{
+  width:100%;height:100%;
+  object-fit:cover;
+  display:none;
+}
+
+/* Hand image */
+#hand{
+  position:absolute;
+  inset:0;
+  width:100%;height:100%;
+  object-fit:contain;
+  transition:.3s;
+}
+#hand.thumb{
+  position:fixed;
+  bottom:20px;left:20px;
+  width:80px;height:80px;
+  border-radius:12px;
+  z-index:30;
+}
+#hand.hidden{display:none}
+
+/* Duck canvas */
+#duckCanvas{
+  position:absolute;
+  bottom:0;
+  width:100%;height:50%;
+  display:none;
+  z-index:20;
 }
 
 /* HUD */
-#hudBtn{position:fixed;top:10px;right:10px;z-index:100}
-#hud{
-  position:fixed;top:50px;right:10px;
-  width:340px;max-height:50vh;
-  background:rgba(0,0,0,.75);
-  border:1px solid #555;border-radius:8px;
-  padding:8px;font-size:12px;
-  display:none;overflow:auto
+#hudBtn{
+  position:fixed;top:8px;right:8px;z-index:300;
 }
-button{padding:6px 10px;margin:4px}
-pre{white-space:pre-wrap;word-break:break-word}
+#hud{
+  position:fixed;top:44px;right:8px;
+  width:320px;max-height:45vh;
+  background:rgba(0,0,0,.75);
+  border:1px solid #555;
+  border-radius:8px;
+  padding:8px;
+  font-size:12px;
+  display:none;
+  overflow:auto;
+  z-index:300;
+}
+button{margin:4px;padding:6px 10px}
 </style>
 </head>
 
 <body>
 
-<video id="video" autoplay playsinline muted></video>
-<img id="handImg" src="hand_open.png">
-<canvas id="duckCanvas"></canvas>
+<div id="title">Colorful JapanD</div>
+
+<div id="round">
+  <video id="video" autoplay muted playsinline></video>
+  <img id="hand" src="hand_open.png">
+  <canvas id="duckCanvas"></canvas>
+</div>
 
 <button id="hudBtn">≡</button>
-
 <div id="hud">
-  <button id="copyHud">Copy</button>
+  <button id="copy">Copy</button>
   <button id="reset">Reset</button>
-  <div>
-    <button id="camBack">Back Cam</button>
-    <button id="camFront">Front Cam</button>
-  </div>
   <pre id="hudText">IDLE</pre>
 </div>
 
-<button id="startCam" style="position:fixed;bottom:20px;left:20px">
-Start Camera
+<button id="startCam" style="position:fixed;bottom:20px;right:20px">
+Camera start
 </button>
 
 <script>
-/* =======================
-   STATE
-======================= */
-let state="IDLE"; // IDLE | SCAN | FREEZE | DUCK
+/* ===== STATE ===== */
+let state="IDLE";
 let stream=null, model=null;
-let hudLines=[];
-let facing="environment";
-let lastDetect={group:"none",score:0};
-let lastAction="none";
+let engine=null, scene=null;
+let hudLog=[];
 
-/* =======================
-   HUD
-======================= */
+/* ===== HUD ===== */
 const hud=document.getElementById("hud");
 const hudText=document.getElementById("hudText");
 document.getElementById("hudBtn").onclick=()=>{
   hud.style.display = hud.style.display==="none"?"block":"none";
 };
-function log(line){
-  hudLines.push(line);
-  if(hudLines.length>40) hudLines.shift();
-  renderHud();
+function log(m){
+  hudLog.push(m);
+  if(hudLog.length>40) hudLog.shift();
+  hudText.textContent=hudLog.join("\n");
 }
-function renderHud(){
-  const backend = (window.tf && tf.getBackend)?tf.getBackend():"?";
-  hudText.textContent =
-`=== STATE ===
-state: ${state}
-lastAction: ${lastAction}
-
-=== CAMERA ===
-facing: ${facing}
-running: ${!!stream}
-frozen: ${state==="FREEZE"||state==="DUCK"}
-
-=== COCO ===
-group: ${lastDetect.group}
-score: ${lastDetect.score.toFixed(2)}
-threshold: 0.45
-
-=== DEVICE ===
-secure: ${window.isSecureContext}
-UA: ${navigator.userAgent}
-TF backend: ${backend}
-
---- LOG ---
-${hudLines.join("\n")}`;
-}
-document.getElementById("copyHud").onclick=()=>{
+document.getElementById("copy").onclick=()=>{
   navigator.clipboard.writeText(hudText.textContent);
 };
 
-/* =======================
-   CAMERA
-======================= */
+/* ===== Camera ===== */
 const video=document.getElementById("video");
-
 async function startCamera(){
-  if(stream) stopCamera();
   stream=await navigator.mediaDevices.getUserMedia({
-    video:{facingMode:facing,width:640,height:480},
+    video:{facingMode:"environment",width:640,height:480},
     audio:false
   });
   video.srcObject=stream;
   video.style.display="block";
   state="SCAN";
-  lastAction="startCamera";
+  document.getElementById("hand").className="thumb";
   log("Camera started");
 }
-
 function freezeCamera(){
-  if(stream) stream.getVideoTracks()[0].enabled=false;
+  stream.getVideoTracks()[0].enabled=false;
   state="FREEZE";
-  lastAction="freezeCamera";
   log("Camera frozen");
 }
-
 function stopCamera(){
   if(stream){
     stream.getTracks().forEach(t=>t.stop());
@@ -158,23 +164,19 @@ function stopCamera(){
   video.style.display="none";
 }
 
-/* =======================
-   COCO
-======================= */
+/* ===== COCO ===== */
 async function loadCoco(){
   await tf.setBackend("webgl");
   await tf.ready();
   model=await cocoSsd.load();
   log("COCO loaded");
 }
-
 function group(cls){
   cls=cls.toLowerCase();
   if(["pen","knife","scissors","fork","spoon","toothbrush"].includes(cls)) return "pen";
   if(["cell phone","wallet","book"].includes(cls)) return "phone";
   return "none";
 }
-
 async function detect(){
   if(state!=="SCAN"||!model) return;
   const preds=await model.detect(video);
@@ -186,26 +188,19 @@ async function detect(){
     }
   });
   if(best.score>0.45){
-    lastDetect=best;
     log(`DETECT ${best.group} ${best.score.toFixed(2)}`);
     freezeCamera();
-    showHandAndDuck();
+    showDuck(true); // semi-transparent
   }
 }
 
-/* =======================
-   BABYLON DUCK + HAND
-======================= */
-let engine,scene;
-const handImg=document.getElementById("handImg");
-
-function showHandAndDuck(){
-  handImg.style.display="block";
+/* ===== Babylon Duck ===== */
+function showDuck(transparent){
   const canvas=document.getElementById("duckCanvas");
   canvas.style.display="block";
-
   engine=new BABYLON.Engine(canvas,true);
   scene=new BABYLON.Scene(engine);
+
   const cam=new BABYLON.ArcRotateCamera(
     "c",Math.PI/2,Math.PI/3,2,BABYLON.Vector3.Zero(),scene
   );
@@ -213,50 +208,51 @@ function showHandAndDuck(){
   new BABYLON.HemisphericLight("l",new BABYLON.Vector3(1,1,0),scene);
 
   BABYLON.SceneLoader.Append("./","duck.glb",scene,()=>{
+    scene.meshes.forEach(m=>{
+      if(m.material){
+        m.material.alpha = transparent ? 0.5 : 1.0;
+      }
+    });
     engine.runRenderLoop(()=>scene.render());
-    log("Duck loaded");
   });
   state="DUCK";
-  lastAction="showDuck";
+  log(transparent?"Duck preview":"Duck confirmed");
 }
 
-/* =======================
-   LOOP
-======================= */
+/* ===== Loop ===== */
 async function loop(){
   await detect();
   setTimeout(loop,150);
 }
 
-/* =======================
-   RESET / CAMERA SWITCH
-======================= */
-document.getElementById("reset").onclick=()=>{
-  if(engine){engine.dispose();engine=null;}
-  document.getElementById("duckCanvas").style.display="none";
-  handImg.style.display="none";
-  if(stream) stream.getVideoTracks()[0].enabled=true;
-  state="SCAN";
-  lastAction="reset";
-  log("RESET");
-};
-
-document.getElementById("camBack").onclick=async()=>{
-  facing="environment"; lastAction="camBack"; log("Switch to back cam");
-  await startCamera();
-};
-document.getElementById("camFront").onclick=async()=>{
-  facing="user"; lastAction="camFront"; log("Switch to front cam");
-  await startCamera();
-};
-
-/* =======================
-   INIT
-======================= */
+/* ===== Buttons ===== */
 document.getElementById("startCam").onclick=async()=>{
   await startCamera();
   await loadCoco();
   loop();
+};
+
+document.getElementById("reset").onclick=()=>{
+  if(engine){engine.dispose();engine=null;}
+  document.getElementById("duckCanvas").style.display="none";
+  document.getElementById("hand").className="";
+  stopCamera();
+  state="IDLE";
+  log("RESET");
+};
+
+/* ===== Accept (tap duck) ===== */
+document.getElementById("duckCanvas").onclick=()=>{
+  if(state==="DUCK"){
+    // make opaque
+    scene.meshes.forEach(m=>{
+      if(m.material) m.material.alpha=1.0;
+    });
+    document.getElementById("hand").className="hidden";
+    stopCamera();
+    state="ACCEPT";
+    log("ACCEPT");
+  }
 };
 </script>
 </body>
