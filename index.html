@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
-<title>Duck UI – Camera + COCO + Freeze + Babylon</title>
+<title>Duck UI – Camera + COCO + Freeze + Babylon (All-in-One)</title>
 
 <!-- ===== TF + COCO ===== -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
@@ -22,66 +22,42 @@ html,body{
   background:#000;overflow:hidden;
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
 }
-
 #container{position:relative;width:100vw;height:100vh;overflow:hidden;}
 #video{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  background:#000;
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;background:#000;
 }
-
 #babylonCanvas{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  pointer-events:none;
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:auto; /* ← Resetでタップできる */
   display:none;
 }
-
 #duckPreview{
-  position:absolute;
-  left:8px;bottom:8px;
-  width:96px;height:96px;
+  position:absolute;left:8px;bottom:8px;
+  width:96px;height:96px;border-radius:12px;
   background:rgba(255,255,255,0.08);
-  border-radius:12px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:#fff;
-  font-size:12px;
+  color:#fff;font-size:12px;
+  display:flex;align-items:center;justify-content:center;
 }
-
 #pill{
-  position:fixed;
-  top:8px;right:8px;
-  padding:6px 10px;
-  border-radius:999px;
-  background:rgba(0,0,0,0.6);
-  color:#fff;
-  font-size:12px;
-  z-index:5000;
+  position:fixed;top:8px;right:8px;
+  padding:6px 10px;border-radius:999px;
+  background:rgba(0,0,0,0.6);color:#fff;
+  font-size:12px;z-index:5000;
 }
 
 /* ===== DEBUG HUD ===== */
 #debugHud{
-  position:fixed;
-  top:8px;left:8px;
+  position:fixed;top:8px;left:8px;
   width:min(520px,calc(100vw - 16px));
-  max-height:45vh;
+  max-height:45vh;overflow:auto;
   background:rgba(0,0,0,0.65);
   border:1px solid rgba(255,255,255,0.2);
-  border-radius:10px;
-  display:none;
-  z-index:9000;
+  border-radius:10px;z-index:9000;
 }
 #debugHud pre{
-  margin:0;
-  padding:8px;
-  font-size:11px;
-  color:#b7ffb7;
-  white-space:pre-wrap;
+  margin:0;padding:8px;font-size:11px;
+  color:#b7ffb7;white-space:pre-wrap;
 }
 </style>
 </head>
@@ -93,32 +69,32 @@ html,body{
 
   <div id="duckPreview">Duck</div>
   <div id="pill">INIT</div>
-  <div id="debugHud"><pre id="debugText"></pre></div>
+  <div id="debugHud"><pre id="debugText">Loading…</pre></div>
 </div>
+
 <script>
+/* ===============================
+   DOM
+================================ */
 const video = document.getElementById("video");
 const pill = document.getElementById("pill");
-const debugHud = document.getElementById("debugHud");
 const debugText = document.getElementById("debugText");
 const babylonCanvas = document.getElementById("babylonCanvas");
 
-let stream = null;
-let model = null;
-
-/* ===== STATE ===== */
-const STATE = {
-  SCAN: 0,
-  FREEZE: 1,
-  DUCK: 2
-};
+/* ===============================
+   STATE
+================================ */
+const STATE = { SCAN:0, FREEZE:1, DUCK:2 };
 let state = STATE.SCAN;
 
-/* ===== HUD ===== */
+/* ===============================
+   HUD
+================================ */
 let hud = {
-  backend:"", camera:"", group:"none",
-  score:0, state:"SCAN", freeze:false
+  backend:"", camera:"",
+  group:"none", score:0,
+  freeze:false, state:"SCAN"
 };
-
 function updateHud(){
   debugText.textContent =
 `=== DEVICE ===
@@ -138,7 +114,10 @@ freeze: ${hud.freeze}
 state: ${hud.state}`;
 }
 
-/* ===== CAMERA ===== */
+/* ===============================
+   CAMERA
+================================ */
+let stream=null;
 async function startCamera(){
   stream = await navigator.mediaDevices.getUserMedia({
     video:{facingMode:"environment",width:{ideal:640},height:{ideal:480}},
@@ -148,29 +127,15 @@ async function startCamera(){
   await video.play();
   const t = stream.getVideoTracks()[0];
   const s = t.getSettings();
-  hud.camera = `${s.width}x${s.height}@${s.frameRate||"?"}fps`;
+  hud.camera = `${s.width||"?"}x${s.height||"?"}@${s.frameRate||"?"}fps`;
 }
+function freezeCamera(){ video.pause(); hud.freeze=true; }
+function resumeCamera(){ video.play(); hud.freeze=false; }
 
-function freezeCamera(){
-  video.pause();
-  hud.freeze = true;
-}
-
-function resumeCamera(){
-  video.play();
-  hud.freeze = false;
-}
-
-/* ===== INIT ===== */
-async function initBase(){
-  await tf.setBackend("webgl");
-  await tf.ready();
-  await startCamera();
-  model = await cocoSsd.load();
-  pill.textContent = "SCAN";
-  debugHud.style.display = "block";
-}
-  /* ===== GROUPING ===== */
+/* ===============================
+   COCO
+================================ */
+let model=null;
 function groupOf(cls){
   if(!cls) return "none";
   cls = cls.toLowerCase();
@@ -178,52 +143,42 @@ function groupOf(cls){
   if(["cell phone","wallet","book","notebook"].includes(cls)) return "phone";
   return "none";
 }
-
-/* ===== DETECTION LOOP ===== */
-let detectBusy = false;
-
+let detectBusy=false;
 async function detectLoop(){
-  if(state !== STATE.SCAN || detectBusy) return;
-  detectBusy = true;
-
+  if(state!==STATE.SCAN || detectBusy) return;
+  detectBusy=true;
   try{
     const preds = await model.detect(video);
-    let best = {group:"none",score:0};
-
+    let best={group:"none",score:0};
     preds.forEach(p=>{
       const g = groupOf(p.class);
-      if(g !== "none" && p.score > best.score){
-        best = {group:g,score:p.score};
+      if(g!=="none" && p.score>best.score){
+        best={group:g,score:p.score};
       }
     });
-
-    hud.group = best.group;
-    hud.score = best.score;
-    hud.state = "SCAN";
-
-    if(best.group !== "none" && best.score > 0.3){
-      state = STATE.FREEZE;
-      pill.textContent = `TRIGGER: ${best.group}`;
+    hud.group=best.group;
+    hud.score=best.score;
+    hud.state="SCAN";
+    if(best.group!=="none" && best.score>=0.30){
+      state=STATE.FREEZE;
+      hud.state="FREEZE";
+      pill.textContent=`TRIGGER: ${best.group}`;
       freezeCamera();
-      setTimeout(()=>enterDuck(), 400);
+      setTimeout(enterDuck, 400);
     }
-  }catch(e){
-    console.error(e);
-  }finally{
-    detectBusy = false;
-    updateHud();
-  }
+  }catch(e){ console.error(e); }
+  finally{ detectBusy=false; updateHud(); }
 }
 
-setInterval(detectLoop, 160);
-  /* ===== BABYLON ===== */
-let engine, scene, duck;
-
+/* ===============================
+   BABYLON (Duck)
+================================ */
+let engine=null, scene=null;
 function initBabylon(){
   engine = new BABYLON.Engine(babylonCanvas, true);
   scene = new BABYLON.Scene(engine);
   const cam = new BABYLON.ArcRotateCamera(
-    "c", Math.PI/2, Math.PI/3, 3,
+    "cam", Math.PI/2, Math.PI/3, 3,
     BABYLON.Vector3.Zero(), scene
   );
   cam.attachControl(babylonCanvas, true);
@@ -232,23 +187,48 @@ function initBabylon(){
   BABYLON.SceneLoader.Append(
     "", "duck.glb", scene,
     ()=>{
-      duck = scene.meshes.find(m=>m.name !== "__root__");
-      duck.scaling.setAll(0.8);
+      const root = scene.meshes.find(m=>m.name!=="__root__");
+      if(root) root.scaling.setAll(0.9);
     }
   );
 }
-
 function enterDuck(){
-  state = STATE.DUCK;
-  hud.state = "DUCK";
-  babylonCanvas.style.display = "block";
+  state=STATE.DUCK;
+  hud.state="DUCK";
+  babylonCanvas.style.display="block";
   initBabylon();
   engine.runRenderLoop(()=>scene.render());
-  pill.textContent = "DUCK MODE";
+  pill.textContent="DUCK MODE (tap to reset)";
+  updateHud();
 }
 
-/* ===== START ===== */
-initBase();
+/* ===============================
+   RESET (Tap)
+================================ */
+function resetToScan(){
+  state=STATE.SCAN;
+  hud.state="SCAN";
+  hud.freeze=false;
+  if(engine){ engine.stopRenderLoop(); }
+  babylonCanvas.style.display="none";
+  resumeCamera();
+  pill.textContent="SCAN";
+  updateHud();
+}
+babylonCanvas.addEventListener("click", resetToScan);
+
+/* ===============================
+   INIT
+================================ */
+(async function init(){
+  await tf.setBackend("webgl");
+  await tf.ready();
+  await startCamera();
+  model = await cocoSsd.load();
+  pill.textContent="SCAN";
+  updateHud();
+  setInterval(detectLoop, 160);
+})();
 </script>
 </body>
 </html>
