@@ -1,100 +1,79 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Duck Only Test (xx2323kanaa-code)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-      height: 100%;
-    }
-    #three-canvas {
-      width: 100vw;
-      height: 100vh;
-      display: block;
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duck Babylon Mobile Test</title>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+
+<style>
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+#renderCanvas {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+</style>
 </head>
+
 <body>
-  <canvas id="three-canvas"></canvas>
+<canvas id="renderCanvas"></canvas>
 
-  <!-- simple_cube と同じスタイル：古典的 three.min.js + GLTFLoader -->
-  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true);
 
-  <script>
-    const canvas   = document.getElementById('three-canvas');
-    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
+const createScene = async () => {
+  const scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x222222);
+  const camera = new BABYLON.ArcRotateCamera(
+    "cam",
+    Math.PI / 2,
+    Math.PI / 2.2,
+    3,
+    BABYLON.Vector3.Zero(),
+    scene
+  );
+  camera.attachControl(canvas, true);
 
-    const camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      100
-    );
-    camera.position.set(0, 0, 3);
+  const light = new BABYLON.HemisphericLight(
+    "light",
+    new BABYLON.Vector3(0, 1, 0),
+    scene
+  );
+  light.intensity = 1.0;
 
-    // ライト
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(1, 1, 1);
-    scene.add(dir);
+  const result = await BABYLON.SceneLoader.ImportMeshAsync(
+    "",
+    "./",
+    "duck.glb",
+    scene
+  );
 
-    // 読み込み中に回しておくキューブ
-    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    const boxMat = new THREE.MeshNormalMaterial();
-    const cube   = new THREE.Mesh(boxGeo, boxMat);
-    scene.add(cube);
+  const duck = result.meshes[0];
+  duck.scaling.scaleInPlace(1.5);
 
-    // ★ ここで Duck.glb を読む（D が大文字）
-    const loader = new THREE.GLTFLoader();
+  scene.registerBeforeRender(() => {
+    duck.rotation.y += 0.01;
+  });
 
-    const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
-    // ↑ ユーザー名：xx2323kanaa-code、リポジトリ名：DuckD、ファイル名：Duck.glb
+  return scene;
+};
 
-    loader.load(
-      duckUrl,
-      function (gltf) {
-        // 読み込めたらキューブを消してアヒルだけ出す
-        scene.remove(cube);
-        const duck = gltf.scene;
-        duck.scale.set(1.0, 1.0, 1.0);
-        duck.position.set(0, -0.5, 0);
-        scene.add(duck);
-      },
-      undefined,
-      function (error) {
-        console.error('Duck.glb load error:', error);
-      }
-    );
+createScene().then(scene => {
+  engine.runRenderLoop(() => scene.render());
+});
 
-    function onResize() {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    }
-    window.addEventListener('resize', onResize);
-    onResize();
-
-    function animate() {
-      requestAnimationFrame(animate);
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.02;
-      renderer.render(scene, camera);
-    }
-    animate();
-  </script>
+window.addEventListener("resize", () => engine.resize());
+</script>
 </body>
 </html>
