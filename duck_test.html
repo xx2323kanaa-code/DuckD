@@ -1,111 +1,254 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Duck.glb PC Test</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-      height: 100%;
-    }
-    #three-canvas {
-      width: 100vw;
-      height: 100vh;
-      display: block;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no" />
+<title>Duck UI – Camera + COCO + Freeze + Babylon</title>
+
+<!-- ===== TF + COCO ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+<!-- ===== Babylon ===== -->
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+
+<style>
+html,body{
+  margin:0;padding:0;width:100%;height:100%;
+  background:#000;overflow:hidden;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+}
+
+#container{position:relative;width:100vw;height:100vh;overflow:hidden;}
+#video{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  background:#000;
+}
+
+#babylonCanvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+  display:none;
+}
+
+#duckPreview{
+  position:absolute;
+  left:8px;bottom:8px;
+  width:96px;height:96px;
+  background:rgba(255,255,255,0.08);
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+  font-size:12px;
+}
+
+#pill{
+  position:fixed;
+  top:8px;right:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.6);
+  color:#fff;
+  font-size:12px;
+  z-index:5000;
+}
+
+/* ===== DEBUG HUD ===== */
+#debugHud{
+  position:fixed;
+  top:8px;left:8px;
+  width:min(520px,calc(100vw - 16px));
+  max-height:45vh;
+  background:rgba(0,0,0,0.65);
+  border:1px solid rgba(255,255,255,0.2);
+  border-radius:10px;
+  display:none;
+  z-index:9000;
+}
+#debugHud pre{
+  margin:0;
+  padding:8px;
+  font-size:11px;
+  color:#b7ffb7;
+  white-space:pre-wrap;
+}
+</style>
 </head>
+
 <body>
-  <canvas id="three-canvas"></canvas>
+<div id="container">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="babylonCanvas"></canvas>
 
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.155.0/build/three.module.js';
-    import { GLTFLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js';
-    import { DRACOLoader } from 'https://unpkg.com/three@0.155.0/examples/jsm/loaders/DRACOLoader.js';
+  <div id="duckPreview">Duck</div>
+  <div id="pill">INIT</div>
+  <div id="debugHud"><pre id="debugText"></pre></div>
+</div>
+<script>
+const video = document.getElementById("video");
+const pill = document.getElementById("pill");
+const debugHud = document.getElementById("debugHud");
+const debugText = document.getElementById("debugText");
+const babylonCanvas = document.getElementById("babylonCanvas");
 
-    const canvas   = document.getElementById('three-canvas');
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
+let stream = null;
+let model = null;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x222222);
+/* ===== STATE ===== */
+const STATE = {
+  SCAN: 0,
+  FREEZE: 1,
+  DUCK: 2
+};
+let state = STATE.SCAN;
 
-    const camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      100
-    );
-    camera.position.set(0, 0, 3);
+/* ===== HUD ===== */
+let hud = {
+  backend:"", camera:"", group:"none",
+  score:0, state:"SCAN", freeze:false
+};
 
-    // ライト
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(1, 1, 1);
-    scene.add(dir);
+function updateHud(){
+  debugText.textContent =
+`=== DEVICE ===
+UA: ${navigator.userAgent}
+secure: ${window.isSecureContext}
 
-    // 必ず見えるデバッグ用キューブ
-    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    const boxMat = new THREE.MeshNormalMaterial();
-    const cube   = new THREE.Mesh(boxGeo, boxMat);
-    scene.add(cube);
+=== TF ===
+backend: ${tf.getBackend()}
 
-    // 画面リサイズ対応
-    function onResize() {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    }
-    window.addEventListener('resize', onResize);
-    onResize();
+=== CAMERA ===
+${hud.camera}
 
-    // ★ Duck.glb 読み込み（Draco対応付き）
-    const loader      = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath('https://unpkg.com/three@0.155.0/examples/jsm/libs/draco/');
-    loader.setDRACOLoader(dracoLoader);
+=== DETECTION ===
+group: ${hud.group}
+score: ${hud.score.toFixed(2)}
+freeze: ${hud.freeze}
+state: ${hud.state}`;
+}
 
-    const duckUrl = 'https://xx2323kanaa-code.github.io/DuckD/Duck.glb';
+/* ===== CAMERA ===== */
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:"environment",width:{ideal:640},height:{ideal:480}},
+    audio:false
+  });
+  video.srcObject = stream;
+  await video.play();
+  const t = stream.getVideoTracks()[0];
+  const s = t.getSettings();
+  hud.camera = `${s.width}x${s.height}@${s.frameRate||"?"}fps`;
+}
 
-    loader.load(
-      duckUrl,
-      (gltf) => {
-        // 読み込めたらキューブを消して Duck だけ表示
-        scene.remove(cube);
-        const duck = gltf.scene;
-        duck.scale.set(1.0, 1.0, 1.0);
-        duck.position.set(0, -0.5, 0);
-        scene.add(duck);
-      },
-      (xhr) => {
-        // 進捗をログに出す（あとで開発者ツールで確認可能）
-        if (xhr.total) {
-          const ratio = (xhr.loaded / xhr.total) * 100;
-          console.log(`Duck loading... ${ratio.toFixed(0)}%`);
-        } else {
-          console.log('Duck loading...');
-        }
-      },
-      (err) => {
-        console.error('Duck.glb load error:', err);
+function freezeCamera(){
+  video.pause();
+  hud.freeze = true;
+}
+
+function resumeCamera(){
+  video.play();
+  hud.freeze = false;
+}
+
+/* ===== INIT ===== */
+async function initBase(){
+  await tf.setBackend("webgl");
+  await tf.ready();
+  await startCamera();
+  model = await cocoSsd.load();
+  pill.textContent = "SCAN";
+  debugHud.style.display = "block";
+}
+  /* ===== GROUPING ===== */
+function groupOf(cls){
+  if(!cls) return "none";
+  cls = cls.toLowerCase();
+  if(["pen","scissors","knife","fork","toothbrush","spoon"].includes(cls)) return "pen";
+  if(["cell phone","wallet","book","notebook"].includes(cls)) return "phone";
+  return "none";
+}
+
+/* ===== DETECTION LOOP ===== */
+let detectBusy = false;
+
+async function detectLoop(){
+  if(state !== STATE.SCAN || detectBusy) return;
+  detectBusy = true;
+
+  try{
+    const preds = await model.detect(video);
+    let best = {group:"none",score:0};
+
+    preds.forEach(p=>{
+      const g = groupOf(p.class);
+      if(g !== "none" && p.score > best.score){
+        best = {group:g,score:p.score};
       }
-    );
+    });
 
-    function animate() {
-      requestAnimationFrame(animate);
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.02;
-      renderer.render(scene, camera);
+    hud.group = best.group;
+    hud.score = best.score;
+    hud.state = "SCAN";
+
+    if(best.group !== "none" && best.score > 0.3){
+      state = STATE.FREEZE;
+      pill.textContent = `TRIGGER: ${best.group}`;
+      freezeCamera();
+      setTimeout(()=>enterDuck(), 400);
     }
-    animate();
-  </script>
+  }catch(e){
+    console.error(e);
+  }finally{
+    detectBusy = false;
+    updateHud();
+  }
+}
+
+setInterval(detectLoop, 160);
+  /* ===== BABYLON ===== */
+let engine, scene, duck;
+
+function initBabylon(){
+  engine = new BABYLON.Engine(babylonCanvas, true);
+  scene = new BABYLON.Scene(engine);
+  const cam = new BABYLON.ArcRotateCamera(
+    "c", Math.PI/2, Math.PI/3, 3,
+    BABYLON.Vector3.Zero(), scene
+  );
+  cam.attachControl(babylonCanvas, true);
+  new BABYLON.HemisphericLight("l", new BABYLON.Vector3(0,1,0), scene);
+
+  BABYLON.SceneLoader.Append(
+    "", "Duck.glb", scene,
+    ()=>{
+      duck = scene.meshes.find(m=>m.name !== "__root__");
+      duck.scaling.setAll(0.8);
+    }
+  );
+}
+
+function enterDuck(){
+  state = STATE.DUCK;
+  hud.state = "DUCK";
+  babylonCanvas.style.display = "block";
+  initBabylon();
+  engine.runRenderLoop(()=>scene.render());
+  pill.textContent = "DUCK MODE";
+}
+
+/* ===== START ===== */
+initBase();
+</script>
 </body>
 </html>
