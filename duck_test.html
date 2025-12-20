@@ -230,7 +230,7 @@ function initBabylon(){
   new BABYLON.HemisphericLight("l", new BABYLON.Vector3(0,1,0), scene);
 
   BABYLON.SceneLoader.Append(
-    "", "Duck.glb", scene,
+    "", "duck.glb", scene,
     ()=>{
       duck = scene.meshes.find(m=>m.name !== "__root__");
       duck.scaling.setAll(0.8);
