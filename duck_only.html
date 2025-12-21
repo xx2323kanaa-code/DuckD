@@ -1,79 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Duck Babylon Mobile Test</title>
+<meta charset="utf-8">
+<title>Babylon GLB Animation Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 
 <style>
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-  background: #000;
+html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+#renderCanvas { width:100%; height:100%; touch-action:none; }
+#ui {
+  position:fixed; bottom:10px; left:10px;
+  background:rgba(0,0,0,0.6); color:#fff;
+  padding:10px; border-radius:8px;
 }
-#renderCanvas {
-  width: 100%;
-  height: 100%;
-  touch-action: none;
-}
+button { margin:2px; }
 </style>
 </head>
 
 <body>
 <canvas id="renderCanvas"></canvas>
 
+<div id="ui">
+  <button onclick="setPose(1)">OPEN</button>
+  <button onclick="setPose(20)">EGG</button>
+  <button onclick="setPose(40)">PEN</button>
+  <button onclick="setPose(60)">PHONE</button>
+  <button onclick="setPose(80)">KEY</button>
+  <button onclick="setPose(100)">SALUTE</button>
+</div>
+
 <script>
 const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
 
+let animationGroup = null;
+
 const createScene = async () => {
   const scene = new BABYLON.Scene(engine);
-  scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+  scene.clearColor = new BABYLON.Color4(0.05,0.05,0.05,1);
 
   const camera = new BABYLON.ArcRotateCamera(
     "cam",
     Math.PI / 2,
     Math.PI / 2.2,
-    3,
+    2.5,
     BABYLON.Vector3.Zero(),
     scene
   );
   camera.attachControl(canvas, true);
 
-  const light = new BABYLON.HemisphericLight(
-    "light",
-    new BABYLON.Vector3(0, 1, 0),
-    scene
-  );
-  light.intensity = 1.0;
+  new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0,1,0), scene);
 
-  const result = await BABYLON.SceneLoader.ImportMeshAsync(
-    "",
-    "./",
-    "duck.glb",
-    scene
-  );
+  await BABYLON.SceneLoader.AppendAsync("./", "hand.glb", scene);
 
-  const duck = result.meshes[0];
-  duck.scaling.scaleInPlace(1.5);
+  animationGroup = scene.animationGroups[0];
+  console.log("AnimationGroups:", scene.animationGroups);
 
-  scene.registerBeforeRender(() => {
-    duck.rotation.y += 0.01;
-  });
+  animationGroup.start(true);
+  animationGroup.goToFrame(1);
+  animationGroup.pause();
 
   return scene;
 };
 
-createScene().then(scene => {
-  engine.runRenderLoop(() => scene.render());
+const scenePromise = createScene();
+
+engine.runRenderLoop(() => {
+  scenePromise.then(scene => scene.render());
 });
 
 window.addEventListener("resize", () => engine.resize());
+
+window.setPose = (frame) => {
+  if (!animationGroup) return;
+  animationGroup.goToFrame(frame);
+};
 </script>
 </body>
 </html>
