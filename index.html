@@ -23,24 +23,42 @@ const camera = new BABYLON.ArcRotateCamera(
   "cam",
   Math.PI/2,
   Math.PI/3,
-  2,
+
+  BABYLON.SceneLoader.Append("./", "hand.glb", scene, () => {
+
+  // ★ モデル全体を強制的に中央＆拡大
+  scene.meshes.forEach(m => {
+    m.position.set(0, 0, 0);
+    m.scaling.set(50, 50, 50);   // ← 超重要（小さすぎ対策）
+  });
+
+  // ★ カメラを近づける
+  camera.radius = 3;
+  camera.target = new BABYLON.Vector3(0, 0, 0);
+
+});
+
   BABYLON.Vector3.Zero(),
   scene
 );
 camera.attachControl(canvas, true);
 
 new BABYLON.HemisphericLight("l", new BABYLON.Vector3(0,1,0), scene);
-
 BABYLON.SceneLoader.Append("./", "hand.glb", scene, () => {
-  if (scene.animationGroups.length > 0) {
-    const a = scene.animationGroups[0];
-    a.start(true);
-    a.pause();
-    a.goToFrame(1);
-  }
+
+  // ★ モデル全体を強制的に中央＆拡大
+  scene.meshes.forEach(m => {
+    m.position.set(0, 0, 0);
+    m.scaling.set(50, 50, 50);   // ← 超重要（小さすぎ対策）
+  });
+
+  // ★ カメラを近づける
+  camera.radius = 3;
+  camera.target = new BABYLON.Vector3(0, 0, 0);
+
 });
 
-engine.runRenderLoop(() => scene.render());
+
 </script>
 </body>
 </html>
