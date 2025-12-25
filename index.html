@@ -7,6 +7,7 @@
 html, body { margin:0; width:100%; height:100%; overflow:hidden; }
 canvas { width:100%; height:100%; }
 </style>
+
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 </head>
@@ -19,46 +20,50 @@ const canvas = document.getElementById("c");
 const engine = new BABYLON.Engine(canvas, true);
 const scene = new BABYLON.Scene(engine);
 
+// カメラ
 const camera = new BABYLON.ArcRotateCamera(
   "cam",
-  Math.PI/2,
-  Math.PI/3,
-
-  BABYLON.SceneLoader.Append("./", "hand.glb", scene, () => {
-
-  // ★ モデル全体を強制的に中央＆拡大
-  scene.meshes.forEach(m => {
-    m.position.set(0, 0, 0);
-    m.scaling.set(50, 50, 50);   // ← 超重要（小さすぎ対策）
-  });
-
-  // ★ カメラを近づける
-  camera.radius = 3;
-  camera.target = new BABYLON.Vector3(0, 0, 0);
-
-});
-
+  Math.PI / 2,
+  Math.PI / 3,
+  3,
   BABYLON.Vector3.Zero(),
   scene
 );
 camera.attachControl(canvas, true);
 
-new BABYLON.HemisphericLight("l", new BABYLON.Vector3(0,1,0), scene);
-BABYLON.SceneLoader.Append("./", "hand.glb", scene, () => {
+// ライト
+new BABYLON.HemisphericLight(
+  "light",
+  new BABYLON.Vector3(0, 1, 0),
+  scene
+);
 
-  // ★ モデル全体を強制的に中央＆拡大
-  scene.meshes.forEach(m => {
-    m.position.set(0, 0, 0);
-    m.scaling.set(50, 50, 50);   // ← 超重要（小さすぎ対策）
-  });
+// GLBロード（★ここだけ名前変更）
+BABYLON.SceneLoader.Append(
+  "./",
+  "animetesthand2.glb",
+  scene,
+  () => {
+    console.log("GLB loaded");
 
-  // ★ カメラを近づける
-  camera.radius = 3;
-  camera.target = new BABYLON.Vector3(0, 0, 0);
+    scene.meshes.forEach(m => {
+      m.position.set(0, 0, 0);
+      m.scaling.set(50, 50, 50); // 小さすぎ対策
+    });
 
+    camera.target = BABYLON.Vector3.Zero();
+    camera.radius = 3;
+  }
+);
+
+// レンダーループ
+engine.runRenderLoop(() => {
+  scene.render();
 });
 
-
+window.addEventListener("resize", () => {
+  engine.resize();
+});
 </script>
 </body>
 </html>
